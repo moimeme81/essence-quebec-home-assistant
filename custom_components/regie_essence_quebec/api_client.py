@@ -18,7 +18,6 @@ class RegieEssenceClient:
         self._session = session
 
     async def _fetch_and_parse(self) -> list[dict[str, Any]]:
-        # Spoof a real browser so the government firewall doesn't block Home Assistant
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
@@ -29,10 +28,8 @@ class RegieEssenceClient:
                 content = await response.read()
                 
                 try:
-                    # Decompress the .gz file in memory
                     json_text = gzip.decompress(content).decode('utf-8')
                 except OSError:
-                    # Fallback just in case they stop zipping the file
                     json_text = content.decode('utf-8')
                     
                 data = json.loads(json_text)
@@ -50,7 +47,6 @@ class RegieEssenceClient:
                         "Region": props.get("Region", ""),
                         "latitude": coords[1] if len(coords) > 1 else 0,
                         "longitude": coords[0] if len(coords) > 0 else 0,
-                        # Pass the Prices list natively without stringifying it!
                         "Prices": props.get("Prices", [])
                     })
                 return stations
@@ -69,7 +65,6 @@ class RegieEssenceClient:
         """Fetch all stations and filter down to the specific one being monitored."""
         stations = await self._fetch_and_parse()
         for station in stations:
-            # Match the station by exact address
             if station.get("Address") == address:
                 return station
         return None
