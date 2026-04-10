@@ -2,28 +2,28 @@
   "config": {
     "step": {
       "user": {
-        "title": "Régie Essence Québec test — Region",
-        "description": "Fetching stations from custom API... Select your region.",
+        "title": "Régie Essence Québec — Region",
+        "description": "Fetching stations... Select your region.",
         "data": { "flow_region": "Region" }
       },
       "city": {
-        "title": "Régie Essence Québec test — City",
+        "title": "Régie Essence Québec — City",
         "description": "Region: {flow_region}",
         "data": { "flow_city": "City" }
       },
       "brand": {
-        "title": "Régie Essence Québec test — Brand",
+        "title": "Régie Essence Québec — Brand",
         "description": "City: {flow_city}",
         "data": { "flow_brand": "Brand" }
       },
       "station": {
-        "title": "Régie Essence Québec test — Station",
+        "title": "Régie Essence Québec — Station",
         "description": "Select the exact station to monitor.",
         "data": { "flow_station": "Station / Address" }
       }
     },
     "error": {
-      "cannot_connect": "Could not download station data. Check the API URL or internet connection."
+      "cannot_connect": "Could not download station data. Check internet connection."
     },
     "abort": {
       "already_configured": "This station is already configured."
