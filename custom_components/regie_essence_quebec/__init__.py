@@ -27,26 +27,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
-    # Register the custom service to find closest stations (only register once)
+    # Register the custom service to find closest stations
     if not hass.services.has_service(DOMAIN, "find_closest_stations"):
         async def find_closest_stations(call: ServiceCall) -> dict:
-            lat = float(call.data.get("latitude", 0))
-            lon = float(call.data.get("longitude", 0))
+            raw_lat = call.data.get("latitude")
+            raw_lon = call.data.get("longitude")
             limit = int(call.data.get("limit", 5))
 
-            if lat == 0 or lon == 0:
-                raise ValueError("Valid latitude and longitude must be provided.")
+            # Catch empty or None values before they crash the float() conversion
+            if raw_lat is None or raw_lon is None or raw_lat == "" or raw_lon == "" or raw_lat == "None" or raw_lon == "None":
+                raise ValueError("Could not read GPS coordinates. Check your device_tracker entity!")
 
-            # Grab the client from the coordinator
+            try:
+                lat = float(raw_lat)
+                lon = float(raw_lon)
+            except (ValueError, TypeError):
+                raise ValueError(f"Invalid coordinates provided: lat={raw_lat}, lon={raw_lon}")
+
+            if lat == 0 or lon == 0:
+                raise ValueError("Latitude and longitude cannot be zero.")
+
             client = coordinator._client
             stations = await client.async_get_all_stations()
 
-            # Calculate distance using the Haversine formula
             for s in stations:
                 s_lat = s.get("latitude", 0)
                 s_lon = s.get("longitude", 0)
                 if s_lat and s_lon:
-                    R = 6371.0 # Earth radius in km
+                    R = 6371.0 
                     dlat = math.radians(s_lat - lat)
                     dlon = math.radians(s_lon - lon)
                     a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat)) * math.cos(math.radians(s_lat)) * math.sin(dlon / 2)**2
@@ -55,7 +63,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 else:
                     s["distance_km"] = 99999
 
-            # Sort by distance and grab the top X
             stations.sort(key=lambda x: x.get("distance_km", 99999))
             closest = stations[:limit]
 
