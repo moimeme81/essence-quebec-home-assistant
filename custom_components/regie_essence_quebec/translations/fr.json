@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Régie Essence Québec — Région",
+        "description": "Téléchargement des stations via API... Choisissez votre région.",
+        "data": { "flow_region": "Région" }
+      },
+      "city": {
+        "title": "Régie Essence Québec — Ville",
+        "description": "Région : {flow_region}",
+        "data": { "flow_city": "Ville" }
+      },
+      "brand": {
+        "title": "Régie Essence Québec — Bannière",
+        "description": "Ville : {flow_city}",
+        "data": { "flow_brand": "Bannière" }
+      },
+      "station": {
+        "title": "Régie Essence Québec — Station",
+        "description": "Sélectionnez la station exacte à surveiller.",
+        "data": { "flow_station": "Station / Adresse" }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de contacter l'API. Vérifiez l'URL ou votre connexion."
+    },
+    "abort": {
+      "already_configured": "Cette station est déjà configurée."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "data": {
+          "scan_interval": "Intervalle de mise à jour (minutes)"
+        }
+      }
+    }
+  }
+}
