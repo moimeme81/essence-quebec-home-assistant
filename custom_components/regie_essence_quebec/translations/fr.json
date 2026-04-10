@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Régie Essence Québec — Région",
-        "description": "Téléchargement des stations via API... Choisissez votre région.",
+        "description": "Téléchargement des stations... Choisissez votre région.",
         "data": { "flow_region": "Région" }
       },
       "city": {
@@ -23,7 +23,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Impossible de contacter l'API. Vérifiez l'URL ou votre connexion."
+      "cannot_connect": "Impossible de télécharger les données. Vérifiez votre connexion."
     },
     "abort": {
       "already_configured": "Cette station est déjà configurée."
