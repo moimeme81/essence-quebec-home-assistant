@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Régie Essence Québec — Region",
-        "description": "Fetching stations from custom API... Select your region.",
+        "description": "Fetching stations... Select your region.",
         "data": { "flow_region": "Region" }
       },
       "city": {
@@ -23,7 +23,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Could not download station data. Check the API URL or internet connection."
+      "cannot_connect": "Could not download station data. Check internet connection."
     },
     "abort": {
       "already_configured": "This station is already configured."
