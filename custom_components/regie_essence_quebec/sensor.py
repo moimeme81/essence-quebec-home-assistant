@@ -101,6 +101,8 @@ class FuelPriceSensor(CoordinatorEntity, SensorEntity):
             "station_name": station.get("Name"),
             "address": station.get("Address"),
             "region": station.get("Region"),
+            "latitude": station.get("latitude"),
+            "longitude": station.get("longitude"),
         }
 
     def _station(self) -> dict | None:
