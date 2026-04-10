@@ -35,7 +35,6 @@ class RegieEssenceCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch the latest data for the monitored station."""
         if not self.address:
             raise UpdateFailed("No station address configured.")
 
