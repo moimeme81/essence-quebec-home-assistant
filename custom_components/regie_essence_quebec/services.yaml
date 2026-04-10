@@ -1,0 +1,30 @@
+find_closest_stations:
+  name: Find Closest Stations
+  description: Returns a list of the closest gas stations based on GPS coordinates.
+  fields:
+    latitude:
+      name: Latitude
+      description: The latitude to search from (can be passed dynamically via template).
+      required: true
+      example: 45.5017
+      selector:
+        number:
+          mode: box
+          step: any
+    longitude:
+      name: Longitude
+      description: The longitude to search from.
+      required: true
+      example: -73.5673
+      selector:
+        number:
+          mode: box
+          step: any
+    limit:
+      name: Limit
+      description: Number of stations to return.
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 20
