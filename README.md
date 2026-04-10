@@ -62,7 +62,8 @@ entities:
 ```
 
 ## À faire
-Modifier la fréquence de mise à jour (par défaut : 60 minutes).
+- [ ] Rendre modifiable la fréquence de mise à jour (par défaut : 5 minutes).
+- [ ] ajouter les logo des marque
 
 
 ## Mentions légales
