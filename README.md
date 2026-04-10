@@ -62,30 +62,45 @@ entities:
 ```
 
 ## script de recherche de station la plus proche
+À partir de la position d'un appareil sélectioné les 3 stations les plus proches sont retourné en notification actionable.
 
 ```yaml
 alias: "Essence: Trouver les plus proches"
 sequence:
-  - service: regie_essence_quebec.find_closest_stations
-    data:
-      latitude: "{{ state_attr('device_tracker.your_phone', 'latitude') }}"
-      longitude: "{{ state_attr('device_tracker.your_phone', 'longitude') }}"
-      limit: 5
+  - data:
+      latitude: "{{ state_attr('device_tracker.your_phone_here', 'latitude') }}"
+      longitude: "{{ state_attr('device_tracker.your_phone_here', 'longitude') }}"
+      limit: 3
     response_variable: gas_results
-  - service: notify.mobile_app_your_phone
-    data:
-      title: ⛽ Top 5 Stations Proches
+    action: regie_essence_quebec.find_closest_stations
+  - data:
+      title: ⛽ Top 3 Stations Proches
       message: >-
-        {% for station in gas_results.stations %} 
-        {{ loop.index }}. {{ station.brand }} ({{ station.distance_km }} km)
-        📍 {{ station.Address }}
-        {%- for price in station.Prices %}
-        - {{ price.GasType }}: {{ price.Price }}
-        {%- endfor %}
-        
+        {% for station in gas_results.stations %}  {{ loop.index }}. {{
+        station.brand }} ({{ station.distance_km }} km) 📍 {{ station.Address }}
+        {%- for price in station.Prices %} - {{ price.GasType }}: {{ price.Price
+        }} {%- endfor %}
+
         {% endfor %}
+      data:
+        actions: >
+          {% set limit = gas_results.stations | length %} {% set limit = 3 if
+          limit > 3 else limit %} {% set ns = namespace(items=[]) %} {% for i in
+          range(limit) %}
+            {% set station = gas_results.stations[i] %}
+            {% set short_brand = station.brand | truncate(6, true, '') %}
+            {% set ns.items = ns.items + [
+              {
+                "action": "URI", 
+                "title": "🚗 #" ~ (i + 1) ~ " " ~ short_brand, 
+                "uri": "https://www.google.com/maps/search/?api=1&query=" ~ station.latitude ~ "," ~ station.longitude 
+              }
+            ] %}
+          {% endfor %} {{ ns.items }}
+    action: notify.mobile_app_YOUR_PHONE_HERE
 mode: single
 icon: mdi:gas-station
+
 ```
 
 ## À faire
