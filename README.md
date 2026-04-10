@@ -61,8 +61,9 @@ entities:
     icon: mdi:truck
 ```
 
-## Options avancées
-Vous pouvez modifier la fréquence de mise à jour (par défaut : 60 minutes) en cliquant sur Configurer sur la carte de l'intégration dans la page Appareils et services.
+## À faire
+Modifier la fréquence de mise à jour (par défaut : 60 minutes).
+
 
 ## Mentions légales
 Cette intégration n'est pas affiliée à la Régie de l'énergie du Québec ni au gouvernement du Québec. Elle extrait simplement les données publiques rendues disponibles sur leur carte interactive.
