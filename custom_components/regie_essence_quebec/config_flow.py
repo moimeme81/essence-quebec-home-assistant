@@ -137,6 +137,6 @@ class RegieEssenceOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Required(CONF_SCAN_INTERVAL, default=current_interval): vol.All(vol.Coerce(int), vol.Range(min=15, max=1440))
+                vol.Required(CONF_SCAN_INTERVAL, default=current_interval): vol.All(vol.Coerce(int), vol.Range(min=5, max=1440))
             })
         )
