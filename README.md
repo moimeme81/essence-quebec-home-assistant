@@ -62,7 +62,7 @@ entities:
 ```
 
 ## À faire
-- [x] Rendre modifiable la fréquence de mise à jour (par défaut : 60 minutes).
+- [x] ~~Rendre modifiable la fréquence de mise à jour (par défaut : 60 minutes).~~ Modifiable en cliquant sur l'icone de configuration de la station.
 - [ ] ajouter les logo des marque
 
 
