@@ -120,20 +120,23 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class RegieEssenceOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
+        # Added an underscore here to prevent clashing with HA's reserved property
+        self._config_entry = config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
-            new_data = dict(self.config_entry.data)
-            new_data.update(user_input)
-            self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
-            return self.async_create_entry(title="", data={})
+            # Home Assistant automatically saves this to the integration's options
+            return self.async_create_entry(title="", data=user_input)
 
-        current_interval = self.config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
+        # Read from options first, fallback to original data. Note the underscores!
+        current_interval = self._config_entry.options.get(
+            CONF_SCAN_INTERVAL, 
+            self._config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
+        )
         
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Optional(CONF_SCAN_INTERVAL, default=current_interval): vol.All(vol.Coerce(int), vol.Range(min=15, max=1440))
+                vol.Required(CONF_SCAN_INTERVAL, default=current_interval): vol.All(vol.Coerce(int), vol.Range(min=15, max=1440))
             })
         )
