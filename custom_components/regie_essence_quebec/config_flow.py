@@ -15,26 +15,21 @@ from .api_client import RegieEssenceClient
 _LOGGER = logging.getLogger(__name__)
 
 class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Régie Essence Québec."""
-
     VERSION = 2
 
     def __init__(self) -> None:
-        """Initialize the config flow."""
         self._stations: list[dict[str, Any]] = []
         self._region: str | None = None
         self._city: str | None = None
         self._brand: str | None = None
 
     def _get_city(self, address: str) -> str:
-        """Helper to extract the city from the address string (e.g. '123 Rue, Laval' -> 'Laval')."""
         if not address:
             return "Inconnu"
         parts = address.split(",")
         return parts[-1].strip() if len(parts) > 1 else address.strip()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
-        """Step 1: Fetch all stations and ask for Region."""
         errors = {}
 
         if not self._stations:
@@ -50,7 +45,6 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._region = user_input["flow_region"]
             return await self.async_step_city()
 
-        # Extract unique regions
         regions = sorted(list(set(s.get("Region", "Inconnu") for s in self._stations if s.get("Region"))))
         
         return self.async_show_form(
@@ -60,7 +54,6 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_city(self, user_input: dict[str, Any] | None = None):
-        """Step 2: Ask for City based on selected Region."""
         if user_input is not None:
             self._city = user_input["flow_city"]
             return await self.async_step_brand()
@@ -76,7 +69,6 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_brand(self, user_input: dict[str, Any] | None = None):
-        """Step 3: Ask for Brand based on selected City."""
         if user_input is not None:
             self._brand = user_input["flow_brand"]
             return await self.async_step_station()
@@ -92,12 +84,10 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_station(self, user_input: dict[str, Any] | None = None):
-        """Step 4: Select specific station by exact address."""
         if user_input is not None:
             address = user_input["flow_station"]
             title = f"{self._brand} - {self._get_city(address)}"
             
-            # Save the integration! We inject the HA instance coordinates here just in case you want distances.
             return self.async_create_entry(
                 title=title,
                 data={
@@ -108,7 +98,6 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 },
             )
 
-        # Build a dictionary to show nice names in the UI but save the raw address in the background
         stations_map = {}
         for s in self._stations:
             if (s.get("Region") == self._region and 
@@ -129,10 +118,7 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
         return RegieEssenceOptionsFlow(config_entry)
 
-
 class RegieEssenceOptionsFlow(config_entries.OptionsFlow):
-    """Handle options (polling interval) after setup."""
-
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
 
