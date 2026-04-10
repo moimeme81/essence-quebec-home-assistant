@@ -61,6 +61,33 @@ entities:
     icon: mdi:truck
 ```
 
+## script de recherche de station la plus proche
+
+```yaml
+alias: "Essence: Trouver les plus proches"
+sequence:
+  - service: regie_essence_quebec.find_closest_stations
+    data:
+      latitude: "{{ state_attr('device_tracker.your_phone', 'latitude') }}"
+      longitude: "{{ state_attr('device_tracker.your_phone', 'longitude') }}"
+      limit: 5
+    response_variable: gas_results
+  - service: notify.mobile_app_your_phone
+    data:
+      title: ⛽ Top 5 Stations Proches
+      message: >-
+        {% for station in gas_results.stations %} 
+        {{ loop.index }}. {{ station.brand }} ({{ station.distance_km }} km)
+        📍 {{ station.Address }}
+        {%- for price in station.Prices %}
+        - {{ price.GasType }}: {{ price.Price }}
+        {%- endfor %}
+        
+        {% endfor %}
+mode: single
+icon: mdi:gas-station
+```
+
 ## À faire
 - [x] ~~Rendre modifiable la fréquence de mise à jour (par défaut : 60 minutes).~~ Modifiable en cliquant sur l'icone de configuration de la station.
 - [ ] ajouter les logo des marque
