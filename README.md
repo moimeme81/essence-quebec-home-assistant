@@ -62,7 +62,7 @@ entities:
 ```
 
 ## À faire
-- [x] Rendre modifiable la fréquence de mise à jour (par défaut : 5 minutes).
+- [x] Rendre modifiable la fréquence de mise à jour (par défaut : 60 minutes).
 - [ ] ajouter les logo des marque
 
 
