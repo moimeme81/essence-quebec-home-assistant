@@ -67,9 +67,31 @@ Options configurables du service :
 
 `limit` : Nombre de stations à retourner (ex: 3).
 
-`radius` : Rayon de recherche en kilomètres (ex: 10).
+`radius` : Rayon de recherche en kilomètres (ex: 10). 
 
 `gas_type` : Type d'essence recherché (`Régulier`, `Super`, ou `Diesel`).
+
+#### helpers:
+
+il est possible de définir des helpers qui déterminent le type d'essence recherché et le rayon de recherche
+
+<table>
+  <tr>
+    <td valign="top" align="center">
+      <p>Helper rayon de recherche:</p>
+      <img src="helper_rayon.png" width="400" alt="First Image">
+      <p>Remplacer la valeur de "radius" par: "{{ states('input_number.rayon_recherche_essence') | float }}"</p>
+    </td>
+    <td valign="top" align="center">
+      <p>Helper type d'essence:</p>
+      <img src="helper_type.png" width="400" alt="Second Image">
+      <p>Remplacer la valeur de "gas_type: par "{{ states('input_select.type_essence_recherche') }}"</p>
+    </td>
+  </tr>
+</table>
+
+
+
 
 ### 3. Scripts : Notifications Interactives avec Android Auto / Google Maps
 Voici deux scripts prêts à l'emploi que vous pouvez ajouter à votre Home Assistant.
