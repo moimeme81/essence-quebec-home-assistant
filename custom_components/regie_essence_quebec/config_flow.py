@@ -1,5 +1,4 @@
 """Config flow for Régie Essence Québec."""
-from __future__ import annotations
 
 import logging
 from typing import Any
@@ -14,7 +13,7 @@ from .api_client import RegieEssenceClient
 
 _LOGGER = logging.getLogger(__name__)
 
-class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 3
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
