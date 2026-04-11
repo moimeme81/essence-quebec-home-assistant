@@ -33,7 +33,8 @@ class RegieEssenceRadiusNumber(RestoreEntity, NumberEntity):
         # Attach this entity to your main integration device
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": entry.title,
+            "name": "Régie Essence Québec",
+            "manufacturer": "Service Hub",
         }
         self._attr_native_value = 10.0 # Default starting value
 
