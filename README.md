@@ -75,7 +75,7 @@ Options configurables du service :
 Voici deux scripts prêts à l'emploi que vous pouvez ajouter à votre Home Assistant.
 Ils utilisent la géolocalisation de votre téléphone pour trouver l'essence autour de vous, et vous envoient une notification avec des boutons cliquables pour lancer directement la navigation GPS vers la station choisie !
 
-⚠️ Important : Remplacez `sensor.votre_telephone_geocoded_location` et `notify.mobile_app_votre_telephone` par les vraies entités de votre appareil.
+⚠️ Important : Remplacez `sensor.votre_telephone` et `notify.mobile_app_votre_telephone` par les vraies entités de votre appareil.
 
 ## Script A : Trouver les 3 stations les plus proches
 
@@ -84,8 +84,8 @@ alias: "Essence: Les 3 Plus Proches"
 sequence:
   - action: regie_essence_quebec.find_closest_stations
     data:
-      latitude: "{{ state_attr('sensor.votre_telephone_geocoded_location', 'Location')[0] }}"
-      longitude: "{{ state_attr('sensor.votre_telephone_geocoded_location', 'Location')[1] }}"
+      latitude: "{{ state_attr(''device_tracker.votre_telephone', 'Location')[0] }}"
+      longitude: "{{ state_attr(''device_tracker.votre_telephone', 'Location')[1] }}"
       limit: 3
       radius: 50
       gas_type: "Régulier"
@@ -126,8 +126,8 @@ alias: "Essence: Les 3 Moins Chères (Rayon 10km)"
 sequence:
   - action: regie_essence_quebec.find_closest_stations
     data:
-      latitude: "{{ state_attr('sensor.votre_telephone_geocoded_location', 'Location')[0] }}"
-      longitude: "{{ state_attr('sensor.votre_telephone_geocoded_location', 'Location')[1] }}"
+      latitude: "{{ state_attr(''device_tracker.votre_telephone_, 'Location')[0] }}"
+      longitude: "{{ state_attr(''device_tracker.votre_telephone, 'Location')[1] }}"
       limit: 3
       radius: 10
       gas_type: "Régulier"
