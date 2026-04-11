@@ -185,7 +185,12 @@ icon: mdi:cash-multiple
 ```
 
 ## À faire
-- [ ] ajouter les logo des marque
+- [ ] Ajouter les logo des marque
+- [ ] Créer des blueprint
+- [ ] Ajouter sensor de tendance
+- [ ] Consolider traduction
+- [ ] Automatisation de zone et de proximité
+- [ ] Ajout de possibilités de conversion de devise (utile pour les touriste)
 
 
 ## Mentions légales
