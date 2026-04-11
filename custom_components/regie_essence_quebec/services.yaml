@@ -1,10 +1,10 @@
 find_closest_stations:
-  name: Find Closest Stations
-  description: Returns a list of the closest gas stations based on GPS coordinates.
+  name: Find Closest/Cheapest Stations
+  description: Returns a list of the cheapest and closest gas stations within a specific radius.
   fields:
     latitude:
       name: Latitude
-      description: The latitude to search from (can be passed dynamically via template).
+      description: The latitude to search from.
       required: true
       example: 45.5017
       selector:
@@ -22,9 +22,27 @@ find_closest_stations:
           step: any
     limit:
       name: Limit
-      description: Number of stations to return.
-      default: 5
+      description: Number of stations to return per list.
+      default: 3
       selector:
         number:
           min: 1
-          max: 20
+          max: 10
+    radius:
+      name: Search Radius (km)
+      description: Maximum distance to search for stations.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+    gas_type:
+      name: Gas Type
+      description: Which fuel type to search for to find the cheapest price.
+      default: Régulier
+      selector:
+        select:
+          options:
+            - Régulier
+            - Super
+            - Diesel
