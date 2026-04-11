@@ -36,3 +36,8 @@ class RegieEssenceCoordinator(DataUpdateCoordinator):
         # Map them by address so sensors can instantly find their specific data
         mapped_stations = {s.get("Address"): s for s in all_stations if s.get("Address")}
         return mapped_stations
+        
+    async def async_get_all_stations(self) -> list[dict[str, Any]]:
+        """Fetch all stations from the upstream API."""
+        return await self._client.async_get_all_stations()
+
