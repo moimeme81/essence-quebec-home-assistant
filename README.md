@@ -1,13 +1,16 @@
-# Régie Essence Québec pour Home Assistant
+# ⛽ Régie Essence Québec pour Home Assistant
 
-Une intégration personnalisée (Custom Component) pour Home Assistant qui récupère en temps réel les prix de l'essence au Québec. Les données proviennent directement de la base de données officielle (GeoJSON) de la [Régie de l'énergie du Québec](https://regieessencequebec.ca/).
+Une intégration personnalisée pour Home Assistant qui récupère en temps réel les prix de l'essence au Québec, directement depuis les données ouvertes de la Régie de l'énergie du Québec.
 
-## Fonctionnalités
+## ✨ Fonctionnalités
 
-- **100% Autonome :** Connexion directe aux serveurs gouvernementaux, sans API intermédiaire.
-- **Support Multi-Carburants :** Remonte automatiquement les prix pour l'**Ordinaire**, le **Super** et le **Diesel** (lorsque disponibles à la station).
-- **Regroupement par Appareil :** Les capteurs sont proprement regroupés sous un seul "Appareil" (Device) représentant votre station-service, incluant la bannière (Esso, Shell, etc.) et l'adresse.
-- **Interface Utilisateur (Config Flow) :** Configuration facile via des menus déroulants (Région > Ville > Bannière > Station).
+* **Configuration simple (UI) :** Fini le YAML ! Cherchez et sélectionnez votre station directement via des menus déroulants (Région > Ville > Bannière > Station).
+* **Trois types de carburant :** Crée automatiquement des capteurs pour l'essence Ordinaire, Super et le Diesel.
+* **Mise à jour paramétrable :** Choisissez la fréquence de rafraîchissement (par défaut : 60 minutes, minimum : 5 minutes).
+* **Coordonnées GPS intégrées :** Les capteurs incluent la latitude et la longitude, permettant une intégration native avec la carte (Map) de Home Assistant.
+* **Moteur de recherche intelligent :** Inclut un service personnalisé (`regie_essence_quebec.find_closest_stations`) capable de calculer en temps réel les stations les plus proches ou les moins chères dans un rayon donné autour de vous !
+
+---
 
 ## Installation
 
@@ -15,12 +18,13 @@ Une intégration personnalisée (Custom Component) pour Home Assistant qui récu
 
 [![Installer via HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=moimeme81&repository=essence-quebec-home-assistant&category=integration)
 
-1. Ouvrez **HACS** dans votre instance Home Assistant.
-2. Allez dans l'onglet **Intégrations**.
+1. Ouvrez HACS dans Home Assistant.
+2. Cliquez sur **Intégrations**.
 3. Cliquez sur les 3 petits points en haut à droite et sélectionnez **Dépôts personnalisés** (Custom repositories).
 4. Ajoutez l'URL de ce dépôt GitHub (`https://github.com/moimeme81/essence-quebec-home-assistant`) et choisissez la catégorie **Intégration**.
-5. Cliquez sur **Ajouter**, puis recherchez "Régie Essence Québec" dans HACS et cliquez sur **Télécharger**.
-6. **Redémarrez Home Assistant**.
+5. Cliquez sur **Télécharger** (Download).
+6. Redémarrez Home Assistant.
+
 
 ### Méthode 2 : Manuelle
 
@@ -28,83 +32,137 @@ Une intégration personnalisée (Custom Component) pour Home Assistant qui récu
 2. Copiez le dossier `custom_components/regie_essence_quebec` dans le dossier `custom_components` de votre configuration Home Assistant.
 3. **Redémarrez Home Assistant**.
 
-## Configuration
+## ⚙️ Configuration
 
-1. Dans Home Assistant, allez dans **Paramètres** > **Appareils et services**.
-2. Cliquez sur le bouton **+ Ajouter une intégration** en bas à droite.
-3. Recherchez **Régie Essence Québec**.
-4. Suivez l'assistant de configuration :
-   - Sélectionnez votre **Région**.
-   - Sélectionnez votre **Ville**.
-   - Sélectionnez la **Bannière** (ex: Shell, Couche-Tard).
-   - Sélectionnez l'adresse exacte de la **Station**.
+1. Allez dans **Paramètres** > **Appareils et services**.
+2. Cliquez sur **+ Ajouter une intégration**.
+3. Cherchez **Régie Essence Québec**.
+4. Laissez-vous guider par les menus pour trouver la station que vous souhaitez surveiller.
 5. C'est fait ! Un nouvel appareil sera créé avec vos capteurs de prix.
+*Note : Vous pouvez ajouter l'intégration plusieurs fois si vous souhaitez surveiller plusieurs stations spécifiques.*
 
-## Exemple d'affichage sur le tableau de bord (Lovelace)
+---
 
-Vous pouvez afficher vos prix sous forme de liste classique avec la carte `entities` :
+
+## 🚀 Utilisation Avancée
+
+### 1. Affichage sur une carte (Map Card)
+Puisque les capteurs incluent les attributs `latitude` et `longitude`, vous pouvez afficher votre station directement sur une carte dans votre tableau de bord. Cliquer sur l'icône affichera le prix actuel !
 
 ```yaml
-type: entities
-title: Prix de l'essence - Ma Station
-icon: mdi:gas-station
-state_color: true
+type: map
+title: Ma Station d'Essence
+default_zoom: 14
 entities:
-  - entity: sensor.ma_station_ordinaire
-    name: Ordinaire
-    icon: mdi:gas-station
-  - entity: sensor.ma_station_super
-    name: Super
-    icon: mdi:gas-station-outline
-  - entity: sensor.ma_station_diesel
-    name: Diesel
-    icon: mdi:truck
+  - entity: sensor.votre_station_ordinaire
 ```
 
-## script de recherche de station la plus proche
-À partir de la position d'un appareil sélectioné les 3 stations les plus proches sont retourné en notification actionable.
+### 2. Le Service "Trouver les plus proches / moins chères"
+L'intégration ajoute un service puissant nommé `regie_essence_quebec.find_closest_stations`.
+En lui fournissant vos coordonnées GPS actuelles (via votre téléphone ou votre zone "Maison"), il calcule la distance avec toutes les stations du Québec et vous renvoie les meilleures options.
+
+Options configurables du service :
+
+`latitude` / `longitude` : Vos coordonnées de départ.
+
+`limit` : Nombre de stations à retourner (ex: 3).
+
+`radius` : Rayon de recherche en kilomètres (ex: 10).
+
+`gas_type` : Type d'essence recherché (`Régulier`, `Super`, ou `Diesel`).
+
+### 3. Scripts : Notifications Interactives avec Android Auto / Google Maps
+Voici deux scripts prêts à l'emploi que vous pouvez ajouter à votre Home Assistant.
+Ils utilisent la géolocalisation de votre téléphone pour trouver l'essence autour de vous, et vous envoient une notification avec des boutons cliquables pour lancer directement la navigation GPS vers la station choisie !
+
+⚠️ Important : Remplacez `sensor.votre_telephone_geocoded_location` et `notify.mobile_app_votre_telephone` par les vraies entités de votre appareil.
+
+## Script A : Trouver les 3 stations les plus proches
 
 ```yaml
-alias: "Essence: Trouver les plus proches"
+alias: "Essence: Les 3 Plus Proches"
 sequence:
-  - data:
-      latitude: "{{ state_attr('device_tracker.your_phone_here', 'latitude') }}"
-      longitude: "{{ state_attr('device_tracker.your_phone_here', 'longitude') }}"
+  - action: regie_essence_quebec.find_closest_stations
+    data:
+      latitude: "{{ state_attr('sensor.votre_telephone_geocoded_location', 'Location')[0] }}"
+      longitude: "{{ state_attr('sensor.votre_telephone_geocoded_location', 'Location')[1] }}"
       limit: 3
+      radius: 50
+      gas_type: "Régulier"
     response_variable: gas_results
-    action: regie_essence_quebec.find_closest_stations
-  - data:
-      title: ⛽ Top 3 Stations Proches
+  - action: notify.mobile_app_votre_telephone
+    data:
+      title: "⛽ Les 3 Plus Proches"
       message: >-
-        {% for station in gas_results.stations %}  {{ loop.index }}. {{
-        station.brand }} ({{ station.distance_km }} km) 📍 {{ station.Address }}
-        {%- for price in station.Prices %} - {{ price.GasType }}: {{ price.Price
-        }} {%- endfor %}
-
+        {% for station in gas_results.closest %} 
+        {{ loop.index }}. {{ station.brand }} - {{ station.distance_km }} km ({{ station.target_price }}¢)
+        📍 {{ station.Address }}
+        
         {% endfor %}
       data:
         actions: >
-          {% set limit = gas_results.stations | length %} {% set limit = 3 if
-          limit > 3 else limit %} {% set ns = namespace(items=[]) %} {% for i in
-          range(limit) %}
-            {% set station = gas_results.stations[i] %}
+          {% set limit = gas_results.closest | length %}
+          {% set limit = 3 if limit > 3 else limit %}
+          {% set ns = namespace(items=[]) %}
+          {% for i in range(limit) %}
+            {% set station = gas_results.closest[i] %}
             {% set short_brand = station.brand | truncate(6, true, '') %}
             {% set ns.items = ns.items + [
               {
                 "action": "URI", 
-                "title": "🚗 #" ~ (i + 1) ~ " " ~ short_brand, 
-                "uri": "https://www.google.com/maps/search/?api=1&query=" ~ station.latitude ~ "," ~ station.longitude 
+                "title": "📍 #" ~ (i + 1) ~ " " ~ short_brand, 
+                "uri": "[https://www.google.com/maps/search/?api=1&query=](https://www.google.com/maps/search/?api=1&query=)" ~ station.latitude ~ "," ~ station.longitude 
               }
             ] %}
-          {% endfor %} {{ ns.items }}
-    action: notify.mobile_app_YOUR_PHONE_HERE
+          {% endfor %}
+          {{ ns.items }}
 mode: single
-icon: mdi:gas-station
+icon: mdi:map-marker-distance
+```
+## Script B : Trouver les 3 stations les moins chères (Rayon de 10km)
 
+```yaml
+alias: "Essence: Les 3 Moins Chères (Rayon 10km)"
+sequence:
+  - action: regie_essence_quebec.find_closest_stations
+    data:
+      latitude: "{{ state_attr('sensor.votre_telephone_geocoded_location', 'Location')[0] }}"
+      longitude: "{{ state_attr('sensor.votre_telephone_geocoded_location', 'Location')[1] }}"
+      limit: 3
+      radius: 10
+      gas_type: "Régulier"
+    response_variable: gas_results
+  - action: notify.mobile_app_votre_telephone
+    data:
+      title: "💸 Les 3 Moins Chères (10km)"
+      message: >-
+        {% for station in gas_results.cheapest %} 
+        {{ loop.index }}. {{ station.brand }} - {{ station.target_price }}¢ ({{ station.distance_km }} km)
+        📍 {{ station.Address }}
+        
+        {% endfor %}
+      data:
+        actions: >
+          {% set limit = gas_results.cheapest | length %}
+          {% set limit = 3 if limit > 3 else limit %}
+          {% set ns = namespace(items=[]) %}
+          {% for i in range(limit) %}
+            {% set station = gas_results.cheapest[i] %}
+            {% set short_brand = station.brand | truncate(6, true, '') %}
+            {% set ns.items = ns.items + [
+              {
+                "action": "URI", 
+                "title": "💸 #" ~ (i + 1) ~ " " ~ short_brand, 
+                "uri": "[https://www.google.com/maps/search/?api=1&query=](https://www.google.com/maps/search/?api=1&query=)" ~ station.latitude ~ "," ~ station.longitude 
+              }
+            ] %}
+          {% endfor %}
+          {{ ns.items }}
+mode: single
+icon: mdi:cash-multiple
 ```
 
 ## À faire
-- [x] ~~Rendre modifiable la fréquence de mise à jour (par défaut : 60 minutes).~~ Modifiable en cliquant sur l'icone de configuration de la station.
 - [ ] ajouter les logo des marque
 
 
