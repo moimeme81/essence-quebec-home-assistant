@@ -24,10 +24,8 @@ class RegieEssenceCoordinator(DataUpdateCoordinator):
         self.lat = entry_data.get(CONF_LATITUDE)
         self.lon = entry_data.get(CONF_LONGITUDE)
         
-        # Read from options first, fallback to original data
         scan_interval = 60
         if config_entry:
-            # Safely grab the options dictionary using the correct protected variable
             scan_interval = config_entry.options.get(
                 "scan_interval", 
                 entry_data.get("scan_interval", 60)
