@@ -55,22 +55,27 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_search(self, user_input: dict[str, Any] | None = None):
         """Search form with multiple optional fields."""
         errors = {}
+        
+        if not self._stations:
+            session = async_get_clientsession(self.hass)
+            client = RegieEssenceClient(session)
+            self._stations = await client.async_get_all_stations()
+
         if user_input is not None:
-            region_q = user_input.get("search_region", "").lower().strip()
-            city_q = user_input.get("search_city", "").lower().strip()
-            brand_q = user_input.get("search_brand", "").lower().strip()
-            keyword_q = user_input.get("search_keyword", "").lower().strip()
+            region_q = str(user_input.get("search_region") or "").lower().strip()
+            city_q = str(user_input.get("search_city") or "").lower().strip()
+            brand_q = str(user_input.get("search_brand") or "").lower().strip()
+            keyword_q = str(user_input.get("search_keyword") or "").lower().strip()
 
             self._search_results = []
             
             for s in self._stations:
-                s_region = s.get("Region", "").lower()
-                s_city = self._get_city(s.get("Address", "")).lower()
-                s_brand = s.get("brand", "").lower()
-                s_addr = s.get("Address", "").lower()
-                s_name = s.get("Name", "").lower()
+                s_region = str(s.get("Region") or "").lower()
+                s_city = str(self._get_city(s.get("Address") or "")).lower()
+                s_brand = str(s.get("brand") or "").lower()
+                s_addr = str(s.get("Address") or "").lower()
+                s_name = str(s.get("Name") or "").lower()
 
-                # Filter logic (skip if it doesn't match the user's input)
                 if region_q and region_q not in s_region: continue
                 if city_q and city_q not in s_city: continue
                 if brand_q and brand_q not in s_brand: continue
@@ -83,14 +88,13 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 return await self.async_step_select_stations()
 
-        # Build the form (all fields optional so the user can enter as little as they want)
         return self.async_show_form(
             step_id="search",
             data_schema=vol.Schema({
                 vol.Optional("search_region"): str,
                 vol.Optional("search_city"): str,
                 vol.Optional("search_brand"): str,
-                vol.Optional("search_keyword", description={"suggested_value": "ex: 25 av"}): str,
+                vol.Optional("search_keyword"): str,
             }),
             errors=errors
         )
@@ -118,13 +122,13 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="city",
             data_schema=vol.Schema({vol.Required("flow_city"): vol.In(sorted(list(cities)))}),
+            description_placeholders={"flow_region": str(self._region)}
         )
 
     async def async_step_brand(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
             self._brand = user_input["flow_brand"]
             
-            # Pass the filtered results to the common selection step
             self._search_results = [
                 s for s in self._stations
                 if s.get("Region") == self._region 
@@ -137,13 +141,13 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="brand",
             data_schema=vol.Schema({vol.Required("flow_brand"): vol.In(sorted(list(brands)))}),
+            description_placeholders={"flow_city": str(self._city)}
         )
 
     # ==========================================
     # COMMON: MULTI-SELECT RESULTS
     # ==========================================
     async def async_step_select_stations(self, user_input: dict[str, Any] | None = None):
-        """Present a multi-select list of whatever stations survived the filters."""
         errors = {}
         if user_input is not None:
             selected_addresses = user_input.get("selected_stations", [])
@@ -152,7 +156,6 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 return self._create_multiple_entries(selected_addresses)
 
-        # Build options for the dropdown
         options = []
         for s in self._search_results:
             addr = s.get("Address", "")
@@ -175,14 +178,12 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # THE MAGIC: BULK ADDING
     # ==========================================
     def _create_multiple_entries(self, addresses: list[str]):
-        """Creates independent ConfigEntries for every selected station."""
         def get_title(addr: str) -> str:
             for s in self._stations:
                 if s.get("Address") == addr:
                     return f"{s.get('brand', 'Inconnu')} - {self._get_city(addr)}"
             return "Station Inconnue"
 
-        # 1. Spawn invisible background imports for every station EXCEPT the first one
         for addr in addresses[1:]:
             self.hass.async_create_task(
                 self.hass.config_entries.flow.async_init(
@@ -195,7 +196,6 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             )
 
-        # 2. Return the very first one to naturally conclude the user's UI flow
         first_addr = addresses[0]
         return self.async_create_entry(
             title=get_title(first_addr),
@@ -208,9 +208,8 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_import(self, user_input: dict[str, Any]):
-        """Secret backdoor step used by the background task to bulk-add stations."""
         return self.async_create_entry(
-            title=user_input["title"],
+            title=user_input.get("title", "Station Importée"),
             data={
                 CONF_ADDRESS: user_input[CONF_ADDRESS],
                 "latitude": self.hass.config.latitude,
@@ -220,7 +219,7 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ==========================================
-    # OPTIONS FLOW (Keep the scan interval settings)
+    # OPTIONS FLOW
     # ==========================================
     @staticmethod
     @callback
