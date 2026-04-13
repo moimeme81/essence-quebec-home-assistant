@@ -99,90 +99,11 @@ Ils utilisent la géolocalisation de votre téléphone pour trouver l'essence au
 
 ⚠️ Important : Remplacez `sensor.votre_telephone` et `notify.mobile_app_votre_telephone` par les vraies entités de votre appareil.
 
-## Script A : Trouver les 3 stations les plus proches
+## Blueprint Notification
 
-```yaml
-alias: "Essence: Les 3 Plus Proches"
-sequence:
-  - action: regie_essence_quebec.find_closest_stations
-    data:
-      latitude: "{{ state_attr(''device_tracker.votre_telephone', 'Location')[0] }}"
-      longitude: "{{ state_attr(''device_tracker.votre_telephone', 'Location')[1] }}"
-      limit: 3
-      radius: 50
-      gas_type: "Régulier"
-    response_variable: gas_results
-  - action: notify.mobile_app_votre_telephone
-    data:
-      title: "⛽ Les 3 Plus Proches"
-      message: >-
-        {% for station in gas_results.closest %} 
-        {{ loop.index }}. {{ station.brand }} - {{ station.distance_km }} km ({{ station.target_price }}¢)
-        📍 {{ station.Address }}
-        
-        {% endfor %}
-      data:
-        actions: >
-          {% set limit = gas_results.closest | length %}
-          {% set limit = 3 if limit > 3 else limit %}
-          {% set ns = namespace(items=[]) %}
-          {% for i in range(limit) %}
-            {% set station = gas_results.closest[i] %}
-            {% set short_brand = station.brand | truncate(6, true, '') %}
-            {% set ns.items = ns.items + [
-              {
-                "action": "URI", 
-                "title": "📍 #" ~ (i + 1) ~ " " ~ short_brand, 
-                "uri": "[https://www.google.com/maps/search/?api=1&query=](https://www.google.com/maps/search/?api=1&query=)" ~ station.latitude ~ "," ~ station.longitude 
-              }
-            ] %}
-          {% endfor %}
-          {{ ns.items }}
-mode: single
-icon: mdi:map-marker-distance
-```
-## Script B : Trouver les 3 stations les moins chères (Rayon de 10km)
+Blueprint permettant la notification de votre appareil mobile. Les notifications sont acctionable (max 3) et vous dirige vers la station désiré en utilisant google maps
 
-```yaml
-alias: "Essence: Les 3 Moins Chères (Rayon 10km)"
-sequence:
-  - action: regie_essence_quebec.find_closest_stations
-    data:
-      latitude: "{{ state_attr(''device_tracker.votre_telephone_, 'Location')[0] }}"
-      longitude: "{{ state_attr(''device_tracker.votre_telephone, 'Location')[1] }}"
-      limit: 3
-      radius: 10
-      gas_type: "Régulier"
-    response_variable: gas_results
-  - action: notify.mobile_app_votre_telephone
-    data:
-      title: "💸 Les 3 Moins Chères (10km)"
-      message: >-
-        {% for station in gas_results.cheapest %} 
-        {{ loop.index }}. {{ station.brand }} - {{ station.target_price }}¢ ({{ station.distance_km }} km)
-        📍 {{ station.Address }}
-        
-        {% endfor %}
-      data:
-        actions: >
-          {% set limit = gas_results.cheapest | length %}
-          {% set limit = 3 if limit > 3 else limit %}
-          {% set ns = namespace(items=[]) %}
-          {% for i in range(limit) %}
-            {% set station = gas_results.cheapest[i] %}
-            {% set short_brand = station.brand | truncate(6, true, '') %}
-            {% set ns.items = ns.items + [
-              {
-                "action": "URI", 
-                "title": "💸 #" ~ (i + 1) ~ " " ~ short_brand, 
-                "uri": "[https://www.google.com/maps/search/?api=1&query=](https://www.google.com/maps/search/?api=1&query=)" ~ station.latitude ~ "," ~ station.longitude 
-              }
-            ] %}
-          {% endfor %}
-          {{ ns.items }}
-mode: single
-icon: mdi:cash-multiple
-```
+[![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2Fmoimeme81%2Fessence-quebec-home-assistant%2Fmain%2Fblueprint%2Fscript%2Ffind_gas.yaml)
 
 ## À faire
 - [ ] Ajouter les logo des marque
