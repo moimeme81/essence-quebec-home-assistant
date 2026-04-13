@@ -1,4 +1,3 @@
-
 """The Régie Essence Québec integration."""
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ from .coordinator import RegieEssenceCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER, Platform.SELECT]
+PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 SERVICE_FIND_CLOSEST = "find_closest_stations"
 SERVICE_FIND_CLOSEST_SCHEMA = vol.Schema(
@@ -95,9 +94,9 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         if not domain_data:
             raise ValueError("No configured integration entry is available.")
 
-        # Use any active coordinator to access shared API fetch logic.
+        # Use any active coordinator's client to access shared API fetch logic.
         coordinator: RegieEssenceCoordinator = next(iter(domain_data.values()))
-        stations = await coordinator.async_get_all_stations()
+        stations = await coordinator._client.async_get_all_stations()
         valid_stations: list[dict[str, Any]] = []
 
         target_types = [gas_type]
@@ -115,11 +114,12 @@ async def _async_register_services(hass: HomeAssistant) -> None:
             earth_radius_km = 6371.0
             dlat = math.radians(s_lat - lat)
             dlon = math.radians(s_lon - lon)
+            
             a = (
-                math.sin(dlat / 2) ** 2
-                 math.cos(math.radians(lat))
+                (math.sin(dlat / 2) ** 2)
+                + math.cos(math.radians(lat))
                 * math.cos(math.radians(s_lat))
-                * math.sin(dlon / 2) ** 2
+                * (math.sin(dlon / 2) ** 2)
             )
             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
             distance_km = round(earth_radius_km * c, 2)
@@ -160,3 +160,14 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         supports_response=SupportsResponse.ONLY,
     )
     _LOGGER.debug("Registered %s.%s service", DOMAIN, SERVICE_FIND_CLOSEST)
+
+
+async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+    """Migrate old config entries to the new version."""
+    _LOGGER.debug("Migrating from version %s to 5", config_entry.version)
+    
+    if config_entry.version < 5:
+        hass.config_entries.async_update_entry(config_entry, version=5)
+        
+    _LOGGER.debug("Migration to version 5 successful")
+    return True

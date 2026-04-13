@@ -2,28 +2,56 @@
   "config": {
     "step": {
       "user": {
-        "title": "Régie Essence Québec — Région",
-        "description": "Téléchargement des stations... Choisissez votre région.",
-        "data": { "flow_region": "Région" }
+        "title": "Ajouter une station-service",
+        "description": "Comment souhaitez-vous trouver vos stations-service ?",
+        "menu_options": {
+          "search": "Recherche avancée",
+          "browse": "Parcourir par région"
+        }
+      },
+      "search": {
+        "title": "Rechercher des stations",
+        "description": "Laissez les champs vides si vous ne souhaitez pas les filtrer.",
+        "data": {
+          "search_region": "Région",
+          "search_city": "Ville",
+          "search_brand": "Marque (ex: Costco)",
+          "search_keyword": "Mot-clé ou Adresse (ex: 25 av)"
+        }
+      },
+      "select_stations": {
+        "title": "Résultats de recherche",
+        "description": "Sélectionnez les stations que vous souhaitez ajouter.",
+        "data": {
+          "selected_stations": "Stations sélectionnées"
+        }
+      },
+      "browse": {
+        "title": "Sélectionner la région",
+        "description": "Choisissez une région à parcourir.",
+        "data": {
+          "flow_region": "Région"
+        }
       },
       "city": {
-        "title": "Régie Essence Québec — Ville",
+        "title": "Sélectionner la ville",
         "description": "Région : {flow_region}",
-        "data": { "flow_city": "Ville" }
+        "data": {
+          "flow_city": "Ville"
+        }
       },
       "brand": {
-        "title": "Régie Essence Québec — Bannière",
+        "title": "Sélectionner la marque",
         "description": "Ville : {flow_city}",
-        "data": { "flow_brand": "Bannière" }
-      },
-      "station": {
-        "title": "Régie Essence Québec — Station",
-        "description": "Sélectionnez la station exacte à surveiller.",
-        "data": { "flow_station": "Station / Adresse" }
+        "data": {
+          "flow_brand": "Marque"
+        }
       }
     },
     "error": {
-      "cannot_connect": "Impossible de télécharger les données. Vérifiez votre connexion."
+      "cannot_connect": "Échec de la connexion à l'API de la Régie de l'énergie.",
+      "no_results_found": "Aucune station ne correspond à vos critères de recherche.",
+      "no_selection": "Vous devez sélectionner au moins une station."
     },
     "abort": {
       "already_configured": "Cette station est déjà configurée."
@@ -32,7 +60,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Options",
+        "title": "Configurer les mises à jour",
         "data": {
           "scan_interval": "Intervalle de mise à jour (minutes)"
         }
