@@ -2,28 +2,56 @@
   "config": {
     "step": {
       "user": {
-        "title": "Régie Essence Québec — Region",
-        "description": "Fetching stations... Select your region.",
-        "data": { "flow_region": "Region" }
+        "title": "Add Gas Station",
+        "description": "How would you like to find your gas stations?",
+        "menu_options": {
+          "search": "Advanced Search",
+          "browse": "Browse by Region"
+        }
+      },
+      "search": {
+        "title": "Search Stations",
+        "description": "Leave fields blank if you don't want to filter by them.",
+        "data": {
+          "search_region": "Region",
+          "search_city": "City",
+          "search_brand": "Brand (ex: Costco)",
+          "search_keyword": "Keyword or Address (ex: 25 av)"
+        }
+      },
+      "select_stations": {
+        "title": "Search Results",
+        "description": "Select the stations you want to add to Home Assistant.",
+        "data": {
+          "selected_stations": "Selected Stations"
+        }
+      },
+      "browse": {
+        "title": "Select Region",
+        "description": "Choose a region to browse.",
+        "data": {
+          "flow_region": "Region"
+        }
       },
       "city": {
-        "title": "Régie Essence Québec — City",
+        "title": "Select City",
         "description": "Region: {flow_region}",
-        "data": { "flow_city": "City" }
+        "data": {
+          "flow_city": "City"
+        }
       },
       "brand": {
-        "title": "Régie Essence Québec — Brand",
+        "title": "Select Brand",
         "description": "City: {flow_city}",
-        "data": { "flow_brand": "Brand" }
-      },
-      "station": {
-        "title": "Régie Essence Québec — Station",
-        "description": "Select the exact station to monitor.",
-        "data": { "flow_station": "Station / Address" }
+        "data": {
+          "flow_brand": "Brand"
+        }
       }
     },
     "error": {
-      "cannot_connect": "Could not download station data. Check internet connection."
+      "cannot_connect": "Failed to connect to the Régie de l'énergie API.",
+      "no_results_found": "No stations matched your search criteria.",
+      "no_selection": "You must select at least one station."
     },
     "abort": {
       "already_configured": "This station is already configured."
@@ -32,7 +60,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Options",
+        "title": "Configure Station Updates",
         "data": {
           "scan_interval": "Update interval (minutes)"
         }
