@@ -2,7 +2,7 @@
 
 DOMAIN = "regie_essence_quebec"
 
-DEFAULT_SCAN_INTERVAL_MINUTES = 60
+DEFAULT_SCAN_INTERVAL_MINUTES = 5
 
 CONF_LATITUDE = "latitude"
 CONF_LONGITUDE = "longitude"
