@@ -107,7 +107,7 @@ Blueprint permettant la notification de votre appareil mobile. Les notifications
 
 ## À faire
 - [ ] Ajouter les logo des marque
-- [ ] Créer des blueprint
+- [x] Créer des blueprint
 - [ ] Ajouter sensor de tendance
 - [ ] Consolider traduction
 - [ ] Automatisation de zone et de proximité
