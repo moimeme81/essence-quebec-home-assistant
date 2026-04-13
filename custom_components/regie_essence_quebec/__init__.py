@@ -136,7 +136,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
                     continue
 
                 raw_price = str(price_item.get("Price", ""))
-                match = re.search(r"([\d\.])", raw_price)
+                match = re.search(r"([\d\.]+)", raw_price)
                 if not match:
                     continue
 
