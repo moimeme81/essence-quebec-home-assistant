@@ -16,6 +16,7 @@ Une intégration personnalisée pour Home Assistant qui récupère en temps rée
 * **Mise à jour paramétrable :** Choisissez la fréquence de rafraîchissement (par défaut : 60 minutes, minimum : 5 minutes).
 * **Coordonnées GPS intégrées :** Les capteurs incluent la latitude et la longitude, permettant une intégration native avec la carte (Map) de Home Assistant.
 * **Moteur de recherche intelligent :** Inclut un service personnalisé (`regie_essence_quebec.find_closest_stations`) capable de calculer en temps réel les stations les plus proches ou les moins chères dans un rayon donné autour de vous !
+* **Notification sur écran de navigation et lien avec app de navigation (iphone/carplay à tester)
 
 ---
 
