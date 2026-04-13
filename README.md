@@ -1,3 +1,10 @@
+<img
+        src="logo.png" 
+        width=100px
+        title="logo"
+        alt="logo"
+    />
+
 # ⛽ Régie Essence Québec pour Home Assistant
 
 Une intégration personnalisée pour Home Assistant qui récupère en temps réel les prix de l'essence au Québec, directement depuis les données ouvertes de la Régie de l'énergie du Québec.
