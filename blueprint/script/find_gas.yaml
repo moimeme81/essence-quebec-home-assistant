@@ -1,0 +1,142 @@
+blueprint:
+  name: Régie Essence - Chercher une station
+  description: "Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification Android Auto/Mobile avec navigation."
+  domain: script
+  input:
+    location_entity:
+      name: Entité de localisation (GPS)
+      description: "Choisissez la personne ou le téléphone (device_tracker) pour utiliser sa position actuelle."
+      selector:
+        entity:
+          domain:
+            - person
+            - device_tracker
+            - zone
+    search_mode:
+      name: Mode de recherche
+      description: "Préférez-vous les stations les moins chères ou les plus proches ?"
+      default: "cheapest"
+      selector:
+        select:
+          options:
+            - label: Les moins chères (Prix)
+              value: "cheapest"
+            - label: Les plus proches (Distance)
+              value: "closest"
+    gas_type:
+      name: Type d'essence
+      description: "Quel type de carburant cherchez-vous ?"
+      default: "Régulier"
+      selector:
+        select:
+          options:
+            - label: Régulier / Ordinaire
+              value: "Régulier"
+            - label: Super / Premium
+              value: "Super"
+            - label: Diesel
+              value: "Diesel"
+    radius:
+      name: Rayon de recherche
+      description: "Distance maximale en kilomètres."
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: km
+          mode: slider
+    limit:
+      name: Nombre de résultats
+      description: "Combien de stations voulez-vous inclure dans le message ?"
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          mode: slider
+    notify_phone:
+      name: Téléphone à notifier
+      description: "Sélectionnez votre téléphone (Il s'agit de l'entité device_tracker de l'application mobile)."
+      selector:
+        entity:
+          integration: mobile_app
+          domain: device_tracker
+
+sequence:
+  - variables:
+      location_entity: !input location_entity
+      search_mode: !input search_mode
+      radius_km: !input radius
+      raw_phone_entity: !input notify_phone
+      notify_service: "{{ raw_phone_entity | replace('device_tracker.', 'notify.mobile_app_') }}"
+      lat: "{{ state_attr(location_entity, 'latitude') | float(0) }}"
+      lon: "{{ state_attr(location_entity, 'longitude') | float(0) }}"
+
+  - condition: template
+    value_template: "{{ lat != 0 and lon != 0 }}"
+
+  - action: regie_essence_quebec.find_closest_stations
+    data:
+      latitude: "{{ lat }}"
+      longitude: "{{ lon }}"
+      radius: !input radius
+      limit: !input limit
+      gas_type: !input gas_type
+    response_variable: gas_results
+
+  - variables:
+      stations: >
+        {% if search_mode == 'closest' %}
+          {{ gas_results.closest }}
+        {% else %}
+          {{ gas_results.cheapest }}
+        {% endif %}
+      gas_title: >
+        {% if search_mode == 'closest' %}
+          Stations les plus proches
+        {% else %}
+          Stations les moins chères
+        {% endif %}
+      gas_message: >
+        {% if stations | length == 0 %}
+          Aucune station trouvée dans un rayon de {{ radius_km }} km.
+        {% else %}
+          {% for s in stations %}
+            {{ loop.index }}. {{ s.brand }} à {{ s.distance_km }}km : {{ s.target_price }}¢/L
+          {% endfor %}
+        {% endif %}
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ stations | length > 0 }}"
+        sequence:
+          - action: "{{ notify_service }}"
+            data:
+              title: "{{ gas_title }}"
+              message: "{{ gas_message }}"
+              data:
+                ttl: 0
+                priority: high
+                channel: driving_alerts
+                # Tapping the notification goes straight to the #1 choice
+                clickAction: "https://www.google.com/maps/dir/?api=1&destination={{ stations[0].latitude }},{{ stations[0].longitude }}"
+                # Generates dynamic action buttons for up to the first 3 stations
+                actions: >
+                  {% set ns = namespace(btns=[]) %}
+                  {% for s in stations[:3] %}
+                    {% set ns.btns = ns.btns + [{"action": "URI", "title": "📍 #" ~ loop.index ~ " " ~ s.brand, "uri": "https://www.google.com/maps/dir/?api=1&destination=" ~ s.latitude ~ "," ~ s.longitude}] %}
+                  {% endfor %}
+                  {{ ns.btns }}
+    default:
+      - action: "{{ notify_service }}"
+        data:
+          title: "{{ gas_title }}"
+          message: "{{ gas_message }}"
+          data:
+            ttl: 0
+            priority: high
+            channel: driving_alerts
