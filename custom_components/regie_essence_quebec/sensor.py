@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_ADDRESS
 from .coordinator import RegieEssenceCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,48 +26,53 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    """Set up the sensor platform."""
     coordinator: RegieEssenceCoordinator = hass.data[DOMAIN][entry.entry_id]
-    configured_stations = entry.options.get("stations", [])
     
     sensors = []
-    for address in configured_stations:
-        for fuel_id, fuel_info in FUEL_TYPES.items():
-            sensors.append(FuelPriceSensor(coordinator, entry, fuel_id, fuel_info, address))
+    for fuel_id, fuel_info in FUEL_TYPES.items():
+        sensors.append(FuelPriceSensor(coordinator, entry, fuel_id, fuel_info))
         
     async_add_entities(sensors)
 
 class FuelPriceSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a Fuel Price Sensor."""
+    
     _attr_has_entity_name = True 
     _attr_native_unit_of_measurement = "¢/L"
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator: RegieEssenceCoordinator, entry: ConfigEntry, fuel_id: str, fuel_info: dict, address: str):
+    def __init__(self, coordinator: RegieEssenceCoordinator, entry: ConfigEntry, fuel_id: str, fuel_info: dict):
         super().__init__(coordinator)
         self._entry = entry
         self._fuel_id = fuel_id
         self._fuel_info = fuel_info
-        self._address = address
         
         self._attr_name = fuel_info["name"]
         self._attr_icon = fuel_info["icon"]
-        # Make the unique ID strictly tied to the specific address
-        self._attr_unique_id = f"{entry.entry_id}_{address}_{fuel_id}"
+        self._attr_unique_id = f"{entry.entry_id}_{fuel_id}"
+
+    def _get_city(self, address: str) -> str:
+        if not address: return "Inconnu"
+        parts = address.split(",")
+        return parts[-1].strip() if len(parts) > 1 else address.strip()
 
     @property
     def device_info(self) -> DeviceInfo:
         station = self._station()
-        brand = "Station Service"
-        name = self._address
+        address = self._entry.data.get(CONF_ADDRESS, "Station Inconnue")
+        brand = "Régie Essence Québec"
+        name = address
         
         if station:
             brand = station.get("brand", brand)
-            name = f"{brand} ({self._address})"
+            name = f"{brand} - {self._get_city(address)}"
             
         return DeviceInfo(
-            identifiers={(DOMAIN, self._address)}, # This ensures each address gets its own Device card
+            identifiers={(DOMAIN, self._entry.entry_id)},
             name=name,
             manufacturer=brand,
-            via_device=(DOMAIN, self._entry.entry_id) # Ties it visually to the Hub
+            model="Station Service",
         )
 
     @property
@@ -77,19 +82,23 @@ class FuelPriceSensor(CoordinatorEntity, SensorEntity):
             return None
 
         for price_item in station.get("Prices", []):
-            actual_type = price_item.get("GasType", "").strip().lower()
+            actual_type = str(price_item.get("GasType", "")).strip().lower()
             target_types = [t.lower() for t in self._fuel_info["gas_types"]]
             
             if actual_type in target_types:
                 raw_price = str(price_item.get("Price", ""))
                 match = re.search(r"([\d\.]+)", raw_price)
-                if match: return float(match.group(1))
+                if match:
+                    return float(match.group(1))
+                    
         return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         station = self._station()
-        if not station: return {}
+        if not station:
+            return {}
+            
         return {
             "station_name": station.get("Name"),
             "address": station.get("Address"),
@@ -99,5 +108,8 @@ class FuelPriceSensor(CoordinatorEntity, SensorEntity):
         }
 
     def _station(self) -> dict | None:
-        if self.coordinator.data is None: return None
-        return self.coordinator.data.get(self._address)
+        """Helper to find the specific station data in the coordinator dictionary."""
+        if self.coordinator.data is None:
+            return None
+        address = self._entry.data.get(CONF_ADDRESS)
+        return self.coordinator.data.get(address)
