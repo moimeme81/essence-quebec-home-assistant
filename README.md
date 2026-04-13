@@ -1,5 +1,5 @@
 <img
-        src="logo.png" 
+        src="https://github.com/moimeme81/essence-quebec-home-assistant/blob/main/custom_components%2Fregie_essence_quebec%2Flogo.png" 
         width=100px
         title="logo"
         alt="logo"
