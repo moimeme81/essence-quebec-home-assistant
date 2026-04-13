@@ -96,10 +96,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
         # Use any active coordinator's client to access shared API fetch logic.
         coordinator: RegieEssenceCoordinator = next(iter(domain_data.values()))
-        
-        # THE FIX IS HERE: We call the client directly.
         stations = await coordinator._client.async_get_all_stations()
-        
         valid_stations: list[dict[str, Any]] = []
 
         target_types = [gas_type]
