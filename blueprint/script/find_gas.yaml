@@ -1,6 +1,6 @@
 blueprint:
   name: Régie Essence - Chercher une station
-  description: "Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification avec navigation intégrée."
+  description: "Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification avec navigation intégrée (Compatible Android Auto & Apple CarPlay)."
   domain: script
   input:
     location_entity:
@@ -14,7 +14,6 @@ blueprint:
             - zone
     search_mode:
       name: Mode de recherche
-      description: "Préférez-vous les stations les moins chères ou les plus proches ?"
       default: "cheapest"
       selector:
         select:
@@ -55,7 +54,6 @@ blueprint:
           mode: slider
     nav_app:
       name: Application GPS
-      description: "Quelle application utiliser pour la navigation ?"
       default: "google_maps"
       selector:
         select:
@@ -66,9 +64,19 @@ blueprint:
               value: "waze"
             - label: Apple Maps
               value: "apple_maps"
+    device_os:
+      name: Système d'exploitation du téléphone
+      description: "Nécessaire pour adapter le format des boutons interactifs."
+      default: "android"
+      selector:
+        select:
+          options:
+            - label: Android
+              value: "android"
+            - label: iOS (iPhone)
+              value: "ios"
     notify_phone:
       name: Téléphone à notifier
-      description: "Sélectionnez l'entité device_tracker de l'application mobile Home Assistant."
       selector:
         entity:
           integration: mobile_app
@@ -80,6 +88,7 @@ sequence:
       search_mode: !input search_mode
       radius_km: !input radius
       nav_app: !input nav_app
+      device_os: !input device_os
       raw_phone_entity: !input notify_phone
       notify_service: "{{ raw_phone_entity | replace('device_tracker.', 'notify.mobile_app_') }}"
       lat: "{{ state_attr(location_entity, 'latitude') | float(0) }}"
@@ -118,11 +127,34 @@ sequence:
             {{ loop.index }}. {{ s.brand }} à {{ s.distance_km }}km : {{ s.target_price }}¢/L
           {% endfor %}
         {% endif %}
+      uri_1: >
+        {% set s = stations[0] %}
+        {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
+        {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
+        {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
+        {% endif %}
+      uri_2: >
+        {% if stations | length > 1 %}{% set s = stations[1] %}
+          {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
+          {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
+          {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
+          {% endif %}
+        {% else %}{% endif %}
+      uri_3: >
+        {% if stations | length > 2 %}{% set s = stations[2] %}
+          {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
+          {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
+          {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
+          {% endif %}
+        {% else %}{% endif %}
 
   - choose:
+      # ==========================================
+      # SCENARIO A: NO STATIONS FOUND
+      # ==========================================
       - conditions:
           - condition: template
-            value_template: "{{ stations | length > 0 }}"
+            value_template: "{{ stations | length == 0 }}"
         sequence:
           - action: "{{ notify_service }}"
             data:
@@ -132,36 +164,87 @@ sequence:
                 ttl: 0
                 priority: high
                 channel: driving_alerts
-                # Lien dynamique pour la notification principale
-                clickAction: >
-                  {% if nav_app == 'waze' %}
-                    https://waze.com/ul?ll={{ stations[0].latitude }},{{ stations[0].longitude }}&navigate=yes
-                  {% elif nav_app == 'apple_maps' %}
-                    http://maps.apple.com/?daddr={{ stations[0].latitude }},{{ stations[0].longitude }}
-                  {% else %}
-                    https://www.google.com/maps/dir/?api=1&destination={{ stations[0].latitude }},{{ stations[0].longitude }}
-                  {% endif %}
-                # Boutons dynamiques pour les 3 premières stations
+                push:
+                  interruption-level: time-sensitive
+
+      # ==========================================
+      # SCENARIO B: STATIONS FOUND & iOS
+      # ==========================================
+      - conditions:
+          - condition: template
+            value_template: "{{ device_os == 'ios' }}"
+        sequence:
+          - action: "{{ notify_service }}"
+            data:
+              title: "{{ gas_title }}"
+              message: "{{ gas_message }}"
+              data:
+                push:
+                  interruption-level: time-sensitive
+                clickAction: "{{ uri_1 | trim }}"
                 actions: >
                   {% set ns = namespace(btns=[]) %}
                   {% for s in stations[:3] %}
                     {% set uri = "" %}
-                    {% if nav_app == 'waze' %}
-                      {% set uri = "https://waze.com/ul?ll=" ~ s.latitude ~ "," ~ s.longitude ~ "&navigate=yes" %}
-                    {% elif nav_app == 'apple_maps' %}
-                      {% set uri = "http://maps.apple.com/?daddr=" ~ s.latitude ~ "," ~ s.longitude %}
-                    {% else %}
-                      {% set uri = "https://www.google.com/maps/dir/?api=1&destination=" ~ s.latitude ~ "," ~ s.longitude %}
-                    {% endif %}
+                    {% if loop.index == 1 %}{% set uri = uri_1 | trim %}
+                    {% elif loop.index == 2 %}{% set uri = uri_2 | trim %}
+                    {% else %}{% set uri = uri_3 | trim %}{% endif %}
                     {% set ns.btns = ns.btns + [{"action": "URI", "title": "📍 #" ~ loop.index ~ " " ~ s.brand, "uri": uri}] %}
                   {% endfor %}
                   {{ ns.btns }}
-    default:
-      - action: "{{ notify_service }}"
-        data:
-          title: "{{ gas_title }}"
-          message: "{{ gas_message }}"
-          data:
-            ttl: 0
-            priority: high
-            channel: driving_alerts
+
+      # ==========================================
+      # SCENARIO C: STATIONS FOUND & ANDROID
+      # ==========================================
+      - conditions:
+          - condition: template
+            value_template: "{{ device_os == 'android' }}"
+        sequence:
+          - action: "{{ notify_service }}"
+            data:
+              title: "{{ gas_title }}"
+              message: "{{ gas_message }}"
+              data:
+                ttl: 0
+                priority: high
+                car_ui: true
+                channel: driving_alerts
+                clickAction: "{{ uri_1 | trim }}"
+                actions:
+                  - action: NAV_STATION_1
+                    title: "📍 #1 {{ stations[0].brand }} ({{ stations[0].distance_km }}km)"
+                  - action: NAV_STATION_2
+                    title: "📍 #2 {{ stations[1].brand if stations | length > 1 else '—' }} ({{ stations[1].distance_km if stations | length > 1 else '' }}km)"
+                  - action: NAV_STATION_3
+                    title: "📍 #3 {{ stations[2].brand if stations | length > 2 else '—' }} ({{ stations[2].distance_km if stations | length > 2 else '' }}km)"
+
+          - wait_for_trigger:
+              - platform: event
+                event_type: mobile_app_notification_action
+                event_data:
+                  action: NAV_STATION_1
+              - platform: event
+                event_type: mobile_app_notification_action
+                event_data:
+                  action: NAV_STATION_2
+              - platform: event
+                event_type: mobile_app_notification_action
+                event_data:
+                  action: NAV_STATION_3
+            timeout: "00:05:00"
+            continue_on_timeout: false
+
+          - variables:
+              tapped_uri: >
+                {% set a = wait.trigger.event.data.action %}
+                {% if a == 'NAV_STATION_1' %}{{ uri_1 | trim }}
+                {% elif a == 'NAV_STATION_2' %}{{ uri_2 | trim }}
+                {% else %}{{ uri_3 | trim }}
+                {% endif %}
+
+          - action: "{{ notify_service }}"
+            data:
+              message: command_activity
+              data:
+                intent_action: android.intent.action.VIEW
+                intent_uri: "{{ tapped_uri }}"
