@@ -4,7 +4,7 @@ Une intégration personnalisée pour Home Assistant qui récupère en temps rée
 
 ## ✨ Fonctionnalités
 
-* **Configuration simple (UI) :** Fini le YAML ! Cherchez et sélectionnez votre/vos station directement via des menus déroulants (Région > Ville > Bannière > Station). Sinon, via la recherche avancée qui permet de voir toute les stations d'une bannière ou en écrivant l'adresse directement (match partiel possible)
+* **Configuration simple (UI) :** Fini le YAML ! Cherchez et sélectionnez votre/vos station directement via des menus déroulants (Région > Ville > Bannière > Station). Sinon, via la recherche avancée qui permet de voir toute les stations d'une bannière par exemple ou en écrivant l'adresse directement (match partiel possible)
 * **Trois types de carburant :** Crée automatiquement des capteurs pour l'essence Ordinaire, Super et le Diesel.
 * **Mise à jour paramétrable :** Choisissez la fréquence de rafraîchissement (par défaut : 60 minutes, minimum : 5 minutes).
 * **Coordonnées GPS intégrées :** Les capteurs incluent la latitude et la longitude, permettant une intégration native avec la carte (Map) de Home Assistant.
