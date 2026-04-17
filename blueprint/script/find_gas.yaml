@@ -1,6 +1,6 @@
 blueprint:
   name: Régie Essence - Chercher une station
-  description: "Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification avec navigation intégrée (Compatible Android Auto & Apple CarPlay)."
+  description: "Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification interactive (Compatible Android Auto & Apple CarPlay)."
   domain: script
   source_url: https://raw.githubusercontent.com/moimeme81/essence-quebec-home-assistant/refs/heads/main/blueprint/script/find_gas.yaml
   input:
@@ -55,7 +55,6 @@ blueprint:
           mode: slider
     nav_app:
       name: Application GPS
-      description: "iOS : Choisit l'app. Android : Le système utilisera l'app par défaut (Maps ou Waze)."
       default: "google_maps"
       selector:
         select:
@@ -68,7 +67,7 @@ blueprint:
               value: "apple_maps"
     device_os:
       name: Système d'exploitation du téléphone
-      description: "Nécessaire pour adapter le format des liens GPS."
+      description: "Nécessaire pour adapter le format des boutons interactifs."
       default: "android"
       selector:
         select:
@@ -129,37 +128,27 @@ sequence:
             {{ loop.index }}. {{ s.brand }} à {{ s.distance_km }}km : {{ s.target_price }}¢/L
           {% endfor %}
         {% endif %}
-        
       uri_1: >
         {% if stations | length > 0 %}{% set s = stations[0] %}
-          {% if device_os == 'ios' %}
-            {% if nav_app == 'waze' %}waze://?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
-            {% elif nav_app == 'google_maps' %}comgooglemaps://?daddr={{ s.latitude }},{{ s.longitude }}&directionsmode=driving
-            {% else %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
-            {% endif %}
-          {% else %}geo:{{ s.latitude }},{{ s.longitude }}
+          {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
+          {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
+          {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
           {% endif %}
         {% endif %}
       uri_2: >
         {% if stations | length > 1 %}{% set s = stations[1] %}
-          {% if device_os == 'ios' %}
-            {% if nav_app == 'waze' %}waze://?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
-            {% elif nav_app == 'google_maps' %}comgooglemaps://?daddr={{ s.latitude }},{{ s.longitude }}&directionsmode=driving
-            {% else %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
-            {% endif %}
-          {% else %}geo:{{ s.latitude }},{{ s.longitude }}
+          {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
+          {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
+          {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
           {% endif %}
-        {% endif %}
+        {% else %}{% endif %}
       uri_3: >
         {% if stations | length > 2 %}{% set s = stations[2] %}
-          {% if device_os == 'ios' %}
-            {% if nav_app == 'waze' %}waze://?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
-            {% elif nav_app == 'google_maps' %}comgooglemaps://?daddr={{ s.latitude }},{{ s.longitude }}&directionsmode=driving
-            {% else %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
-            {% endif %}
-          {% else %}geo:{{ s.latitude }},{{ s.longitude }}
+          {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
+          {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
+          {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
           {% endif %}
-        {% endif %}
+        {% else %}{% endif %}
 
   - choose:
       - conditions:
@@ -174,9 +163,6 @@ sequence:
                 ttl: 0
                 priority: high
                 channel: driving_alerts
-                car_ui: true
-                push:
-                  interruption-level: time-sensitive
 
       - conditions:
           - condition: template
@@ -191,8 +177,6 @@ sequence:
                 priority: high
                 channel: driving_alerts
                 car_ui: true
-                push:
-                  interruption-level: time-sensitive
                 clickAction: "{{ uri_1 | trim }}"
                 actions: >
                   {% set ns = namespace(btns=[]) %}
