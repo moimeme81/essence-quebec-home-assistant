@@ -55,6 +55,7 @@ blueprint:
           mode: slider
     nav_app:
       name: Application GPS
+      description: "iOS : Choisit l'app. Android : Le système utilisera l'app par défaut (Maps ou Waze)."
       default: "google_maps"
       selector:
         select:
@@ -129,7 +130,6 @@ sequence:
           {% endfor %}
         {% endif %}
         
-      # Génération intelligente des liens (Deep Links) natifs selon l'OS et l'App
       uri_1: >
         {% if stations | length > 0 %}{% set s = stations[0] %}
           {% if device_os == 'ios' %}
@@ -137,10 +137,7 @@ sequence:
             {% elif nav_app == 'google_maps' %}comgooglemaps://?daddr={{ s.latitude }},{{ s.longitude }}&directionsmode=driving
             {% else %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
             {% endif %}
-          {% else %}
-            {% if nav_app == 'waze' %}waze://?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
-            {% else %}google.navigation:q={{ s.latitude }},{{ s.longitude }}
-            {% endif %}
+          {% else %}geo:{{ s.latitude }},{{ s.longitude }}
           {% endif %}
         {% endif %}
       uri_2: >
@@ -150,10 +147,7 @@ sequence:
             {% elif nav_app == 'google_maps' %}comgooglemaps://?daddr={{ s.latitude }},{{ s.longitude }}&directionsmode=driving
             {% else %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
             {% endif %}
-          {% else %}
-            {% if nav_app == 'waze' %}waze://?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
-            {% else %}google.navigation:q={{ s.latitude }},{{ s.longitude }}
-            {% endif %}
+          {% else %}geo:{{ s.latitude }},{{ s.longitude }}
           {% endif %}
         {% endif %}
       uri_3: >
@@ -163,10 +157,7 @@ sequence:
             {% elif nav_app == 'google_maps' %}comgooglemaps://?daddr={{ s.latitude }},{{ s.longitude }}&directionsmode=driving
             {% else %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
             {% endif %}
-          {% else %}
-            {% if nav_app == 'waze' %}waze://?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
-            {% else %}google.navigation:q={{ s.latitude }},{{ s.longitude }}
-            {% endif %}
+          {% else %}geo:{{ s.latitude }},{{ s.longitude }}
           {% endif %}
         {% endif %}
 
@@ -213,4 +204,3 @@ sequence:
                     {% set ns.btns = ns.btns + [{"action": "URI", "title": "📍 #" ~ loop.index ~ " " ~ s.brand, "uri": uri}] %}
                   {% endfor %}
                   {{ ns.btns }}
-                  
