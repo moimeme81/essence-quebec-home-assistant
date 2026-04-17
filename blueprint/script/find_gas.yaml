@@ -2,6 +2,7 @@ blueprint:
   name: Régie Essence - Chercher une station
   description: "Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification avec navigation intégrée (Compatible Android Auto & Apple CarPlay)."
   domain: script
+  source_url: https://raw.githubusercontent.com/moimeme81/essence-quebec-home-assistant/refs/heads/main/blueprint/script/find_gas.yaml
   input:
     location_entity:
       name: Entité de localisation (GPS)
@@ -129,22 +130,22 @@ sequence:
         {% endif %}
       uri_1: >
         {% set s = stations[0] %}
-        {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
+        {% if nav_app == 'waze' %}waze://?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
         {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
-        {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
+        {% else %}google.navigation:q={{ s.latitude }},{{ s.longitude }}
         {% endif %}
       uri_2: >
         {% if stations | length > 1 %}{% set s = stations[1] %}
-          {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
+          {% if nav_app == 'waze' %}waze://?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
           {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
-          {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
+          {% else %}google.navigation:q={{ s.latitude }},{{ s.longitude }}
           {% endif %}
         {% else %}{% endif %}
       uri_3: >
         {% if stations | length > 2 %}{% set s = stations[2] %}
-          {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
+          {% if nav_app == 'waze' %}waze://?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
           {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
-          {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
+          {% else %}google.navigation:q={{ s.latitude }},{{ s.longitude }}
           {% endif %}
         {% else %}{% endif %}
 
