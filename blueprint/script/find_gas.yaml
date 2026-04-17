@@ -1,8 +1,7 @@
 blueprint:
   name: Régie Essence - Chercher une station
-  description: "Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification interactive (Compatible Android Auto & Apple CarPlay)."
+  description: "Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification avec navigation intégrée (Compatible Android Auto & Apple CarPlay)."
   domain: script
-  source_url: https://raw.githubusercontent.com/moimeme81/essence-quebec-home-assistant/refs/heads/main/blueprint/script/find_gas.yaml
   input:
     location_entity:
       name: Entité de localisation (GPS)
@@ -129,11 +128,10 @@ sequence:
           {% endfor %}
         {% endif %}
       uri_1: >
-        {% if stations | length > 0 %}{% set s = stations[0] %}
-          {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
-          {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
-          {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
-          {% endif %}
+        {% set s = stations[0] %}
+        {% if nav_app == 'waze' %}https://waze.com/ul?ll={{ s.latitude }},{{ s.longitude }}&navigate=yes
+        {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
+        {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
         {% endif %}
       uri_2: >
         {% if stations | length > 1 %}{% set s = stations[1] %}
@@ -151,6 +149,9 @@ sequence:
         {% else %}{% endif %}
 
   - choose:
+      # ==========================================
+      # SCENARIO A: NO STATIONS FOUND
+      # ==========================================
       - conditions:
           - condition: template
             value_template: "{{ stations | length == 0 }}"
@@ -163,20 +164,23 @@ sequence:
                 ttl: 0
                 priority: high
                 channel: driving_alerts
+                push:
+                  interruption-level: time-sensitive
 
+      # ==========================================
+      # SCENARIO B: STATIONS FOUND & iOS
+      # ==========================================
       - conditions:
           - condition: template
-            value_template: "{{ stations | length > 0 }}"
+            value_template: "{{ device_os == 'ios' }}"
         sequence:
           - action: "{{ notify_service }}"
             data:
               title: "{{ gas_title }}"
               message: "{{ gas_message }}"
               data:
-                ttl: 0
-                priority: high
-                channel: driving_alerts
-                car_ui: true
+                push:
+                  interruption-level: time-sensitive
                 clickAction: "{{ uri_1 | trim }}"
                 actions: >
                   {% set ns = namespace(btns=[]) %}
@@ -188,3 +192,59 @@ sequence:
                     {% set ns.btns = ns.btns + [{"action": "URI", "title": "📍 #" ~ loop.index ~ " " ~ s.brand, "uri": uri}] %}
                   {% endfor %}
                   {{ ns.btns }}
+
+      # ==========================================
+      # SCENARIO C: STATIONS FOUND & ANDROID
+      # ==========================================
+      - conditions:
+          - condition: template
+            value_template: "{{ device_os == 'android' }}"
+        sequence:
+          - action: "{{ notify_service }}"
+            data:
+              title: "{{ gas_title }}"
+              message: "{{ gas_message }}"
+              data:
+                ttl: 0
+                priority: high
+                car_ui: true
+                channel: driving_alerts
+                clickAction: "{{ uri_1 | trim }}"
+                actions:
+                  - action: NAV_STATION_1
+                    title: "📍 #1 {{ stations[0].brand }} ({{ stations[0].distance_km }}km)"
+                  - action: NAV_STATION_2
+                    title: "📍 #2 {{ stations[1].brand if stations | length > 1 else '—' }} ({{ stations[1].distance_km if stations | length > 1 else '' }}km)"
+                  - action: NAV_STATION_3
+                    title: "📍 #3 {{ stations[2].brand if stations | length > 2 else '—' }} ({{ stations[2].distance_km if stations | length > 2 else '' }}km)"
+
+          - wait_for_trigger:
+              - platform: event
+                event_type: mobile_app_notification_action
+                event_data:
+                  action: NAV_STATION_1
+              - platform: event
+                event_type: mobile_app_notification_action
+                event_data:
+                  action: NAV_STATION_2
+              - platform: event
+                event_type: mobile_app_notification_action
+                event_data:
+                  action: NAV_STATION_3
+            timeout: "00:05:00"
+            continue_on_timeout: false
+
+          - variables:
+              tapped_uri: >
+                {% set a = wait.trigger.event.data.action %}
+                {% if a == 'NAV_STATION_1' %}{{ uri_1 | trim }}
+                {% elif a == 'NAV_STATION_2' %}{{ uri_2 | trim }}
+                {% else %}{{ uri_3 | trim }}
+                {% endif %}
+
+          - action: "{{ notify_service }}"
+            data:
+              message: command_activity
+              data:
+                intent_action: android.intent.action.VIEW
+                intent_uri: "{{ tapped_uri }}"
