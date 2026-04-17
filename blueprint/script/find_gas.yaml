@@ -248,3 +248,4 @@ sequence:
               data:
                 intent_action: android.intent.action.VIEW
                 intent_uri: "{{ tapped_uri }}"
+                
