@@ -2,6 +2,7 @@ blueprint:
   name: Régie Essence - Chercher une station
   description: "Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification avec navigation intégrée (Compatible Android Auto & Apple CarPlay)."
   domain: script
+  source_url:Https://raw.githubusercontent.com/moimeme81/essence-quebec-home-assistant/refs/heads/main/blueprint/script/find_gas.yaml
   input:
     location_entity:
       name: Entité de localisation (GPS)
