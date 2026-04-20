@@ -21,6 +21,8 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 SERVICE_FIND_CLOSEST = "find_closest_stations"
 SERVICE_FIND_CLOSEST_SCHEMA = vol.Schema(
     {
