@@ -57,6 +57,27 @@ class FuelPriceSensor(CoordinatorEntity, SensorEntity):
         parts = address.split(",")
         return parts[-1].strip() if len(parts) > 1 else address.strip()
 
+    def _station(self) -> dict | None:
+        """Helper to find the specific station data in the coordinator dictionary."""
+        if self.coordinator.data is None:
+            return None
+        address = self._entry.data.get(CONF_ADDRESS)
+        return self.coordinator.data.get(address)
+
+    def _get_price_item(self) -> dict | None:
+        """Helper to find the specific fuel type block in the station data."""
+        station = self._station()
+        if not station or "Prices" not in station:
+            return None
+
+        for price_item in station.get("Prices", []):
+            actual_type = str(price_item.get("GasType", "")).strip().lower()
+            target_types = [t.lower() for t in self._fuel_info["gas_types"]]
+            
+            if actual_type in target_types:
+                return price_item
+        return None
+
     @property
     def device_info(self) -> DeviceInfo:
         station = self._station()
@@ -77,20 +98,12 @@ class FuelPriceSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float | None:
-        station = self._station()
-        if not station or "Prices" not in station:
-            return None
-
-        for price_item in station.get("Prices", []):
-            actual_type = str(price_item.get("GasType", "")).strip().lower()
-            target_types = [t.lower() for t in self._fuel_info["gas_types"]]
-            
-            if actual_type in target_types:
-                raw_price = str(price_item.get("Price", ""))
-                match = re.search(r"([\d\.]+)", raw_price)
-                if match:
-                    return float(match.group(1))
-                    
+        price_item = self._get_price_item()
+        if price_item:
+            raw_price = str(price_item.get("Price", ""))
+            match = re.search(r"([\d\.]+)", raw_price)
+            if match:
+                return float(match.group(1))
         return None
 
     @property
@@ -99,17 +112,22 @@ class FuelPriceSensor(CoordinatorEntity, SensorEntity):
         if not station:
             return {}
             
-        return {
+        attrs = {
             "station_name": station.get("Name"),
             "address": station.get("Address"),
             "region": station.get("Region"),
             "latitude": station.get("latitude"),
             "longitude": station.get("longitude"),
         }
-
-    def _station(self) -> dict | None:
-        """Helper to find the specific station data in the coordinator dictionary."""
-        if self.coordinator.data is None:
-            return None
-        address = self._entry.data.get(CONF_ADDRESS)
-        return self.coordinator.data.get(address)
+        
+        # Récupération et injection de la tendance (Tendency)
+        price_item = self._get_price_item()
+        if price_item:
+            tendency = price_item.get("Tendency", "stable")
+            attrs["tendency"] = tendency
+            
+            # Ajout d'un emoji visuel pour les cartes Lovelace
+            arrows = {"up": "📈", "down": "📉", "stable": "➖"}
+            attrs["trend_arrow"] = arrows.get(tendency, "➖")
+            
+        return attrs
