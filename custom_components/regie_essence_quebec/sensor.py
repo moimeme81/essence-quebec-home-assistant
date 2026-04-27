@@ -194,6 +194,57 @@ class FuelTrendSensor(CoordinatorEntity, SensorEntity):
             manufacturer=brand,
             model="Station Service",
         )
+        
+        self._attr_name = f"Tendance {fuel_info['name']}"
+        self._attr_unique_id = f"{entry.entry_id}_{fuel_id}_trend"
+
+    def _get_city(self, address: str) -> str:
+        if not address: return "Inconnu"
+        parts = address.split(",")
+        return parts[-1].strip() if len(parts) > 1 else address.strip()
+
+    def _station(self) -> dict | None:
+        if self.coordinator.data is None:
+            return None
+        address = self._entry.data.get(CONF_ADDRESS)
+        return self.coordinator.data.get(address)
+
+    @property
+    def icon(self) -> str:
+        arrows = {"up": "mdi:trending-up", "down": "mdi:trending-down", "stable": "mdi:trending-neutral"}
+        return arrows.get(self.native_value, "mdi:trending-neutral")
+
+    @property
+    def native_value(self) -> str:
+        station = self._station()
+        if not station:
+            return "stable"
+
+        for price_item in station.get("Prices", []):
+            actual_type = str(price_item.get("GasType", "")).strip().lower()
+            target_types = [t.lower() for t in self._fuel_info["gas_types"]]
+            if actual_type in target_types:
+                return price_item.get("Tendency", "stable")
+        return "stable"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        station = self._station()
+        address = self._entry.data.get(CONF_ADDRESS, "Station Inconnue")
+        brand = "Régie Essence Québec"
+        name = address
+        
+        if station:
+            brand = station.get("brand", brand)
+            name = f"{brand} - {self._get_city(address)}"
+            
+        # L'utilisation du même identifier relie cette entité au même appareil que le prix
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._entry.entry_id)},
+            name=name,
+            manufacturer=brand,
+            model="Station Service",
+        )
         sensors.append(FuelTrendSensor(coordinator, entry, fuel_id, fuel_info))
         
     async_add_entities(sensors)
