@@ -2,10 +2,9 @@ name: github-repo-stats
 
 on:
   schedule:
-    # Run this once per day, towards the end of the day for keeping the most
-    # recent data point most meaningful (hours are interpreted in UTC).
+    # S'exécute une fois par jour vers la fin de la journée (en UTC)
     - cron: "0 23 * * *"
-  workflow_dispatch: # Allow for running this manually.
+  workflow_dispatch: # Permet de l'exécuter manuellement
 
 jobs:
   j1:
@@ -13,8 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: run-ghrs
-        # Use latest release.
-        uses: jgehrcke/github-repo-stats@RELEASE
+        uses: jgehrcke/github-repo-stats@v1.4.2
         with:
-          ghtoken: ${{ secrets.ghrs_github_api_token }}
-
+          ghtoken: ${{ secrets.GHRS_GITHUB_API_TOKEN }}
+          # Vos données iront directement dans votre nouveau dépôt privé
+          datarepo: moimeme81/Datarepo
