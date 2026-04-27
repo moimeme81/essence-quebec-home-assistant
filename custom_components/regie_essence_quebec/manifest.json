@@ -1,7 +1,7 @@
 {
   "domain": "regie_essence_quebec",
   "name": "Régie Essence Québec",
-  "version": "0.1.0-beta",
+  "version": "0.1.1-beta",
   "documentation": "https://github.com/moimeme81/essence-quebec-home-assistant",
   "issue_tracker": "https://github.com/moimeme81/essence-quebec-home-assistant/issues",
   "dependencies": [],
