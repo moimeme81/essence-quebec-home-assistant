@@ -9,7 +9,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES
+from .const import DOMAIN, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES, CONF_ADDRESS
 from .api_client import RegieEssenceClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,40 +40,49 @@ class RegieEssenceCoordinator(DataUpdateCoordinator):
         )
 
     def _parse_price(self, price_str: str) -> float:
-        """Nettoie la chaîne '186.9¢' en un nombre flottant 186.9 pour la comparaison."""
+        """Nettoie la chaîne '186.9¢' en un nombre flottant 186.9."""
         if not price_str:
             return 0.0
         try:
-            # On retire le symbole '¢' et les espaces, puis on convertit
             return float(price_str.replace("¢", "").replace("C", "").strip())
         except ValueError:
             return 0.0
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            # 1. Récupération des données fraîches de l'API
+            # 1. Récupération des données globales
             all_stations = await self._client.async_get_all_stations()
         except Exception as err:
             raise UpdateFailed(f"Network error fetching API data: {err}") from err
 
-        # 2. Chargement de la mémoire depuis le disque (seulement au premier passage)
+        # 2. Chargement de la mémoire persistante au premier démarrage
         if self._memory is None:
             self._memory = await self.store.async_load() or {}
 
         memory_changed = False
         processed_stations = {}
+        
+        # On identifie la SEULE station qui nous intéresse pour l'historique
+        monitored_address = self.config_entry.data.get(CONF_ADDRESS)
 
-        # 3. Traitement, Comparaison et Injection
+        # 3. Analyse et détection des tendances
         for station in all_stations:
             address = station.get("Address")
             if not address:
                 continue
 
-            # Création du profil de la station dans la mémoire si elle n'existe pas
+            # Si ce n'est PAS la station surveillée, on passe son tour pour la mémoire
+            if address != monitored_address:
+                # On injecte juste "stable" par défaut pour que les données restent uniformes
+                for gas in station.get("Prices", []):
+                    gas["Tendency"] = "stable"
+                processed_stations[address] = station
+                continue
+
+            # --- À PARTIR D'ICI : On ne traite QUE la station surveillée ---
             if address not in self._memory:
                 self._memory[address] = {}
 
-            # Analyse de chaque type d'essence (Régulier, Super, Diesel)
             for gas in station.get("Prices", []):
                 gas_type = gas.get("GasType")
                 price_str = gas.get("Price")
@@ -82,33 +91,37 @@ class RegieEssenceCoordinator(DataUpdateCoordinator):
                     continue
 
                 current_price = self._parse_price(price_str)
+                old_data = self._memory[address].get(gas_type)
                 
-                # Récupération de l'historique pour CE type d'essence précis
-                history = self._memory[address].get(gas_type, {"price": current_price, "tendency": "stable"})
-                old_price = history["price"]
-                tendency = history["tendency"]
-
-                # Évaluation de la tendance uniquement si le prix a changé
-                if current_price > old_price:
-                    tendency = "up"
+                if old_data is None:
+                    # Première rencontre avec cette station/essence
+                    tendency = "stable"
                     memory_changed = True
-                elif current_price < old_price:
-                    tendency = "down"
-                    memory_changed = True
-                
-                # Mise à jour de la mémoire interne
-                if current_price != old_price:
-                    self._memory[address][gas_type] = {
-                        "price": current_price, 
-                        "tendency": tendency
-                    }
+                else:
+                    old_price = old_data["price"]
+                    tendency = old_data["tendency"]
+                    
+                    # Comparaison pour déterminer la tendance
+                    if current_price > old_price:
+                        tendency = "up"
+                        memory_changed = True
+                    elif current_price < old_price:
+                        tendency = "down"
+                        memory_changed = True
+                    # Si current_price == old_price, on garde la tendance actuelle (up/down/stable)
 
-                # MAGIE : On injecte la tendance directement dans le dictionnaire de l'API !
+                # Mise à jour systématique de la mémoire vive
+                self._memory[address][gas_type] = {
+                    "price": current_price,
+                    "tendency": tendency
+                }
+
+                # Injection de la tendance pour les capteurs et services
                 gas["Tendency"] = tendency
 
             processed_stations[address] = station
 
-        # 4. Sauvegarde de la mémoire sur le disque UNIQUEMENT s'il y a eu des changements
+        # 4. Sauvegarde physique uniquement si une valeur a changé pour la station surveillée
         if memory_changed:
             await self.store.async_save(self._memory)
 
