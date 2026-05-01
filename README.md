@@ -116,7 +116,7 @@ Blueprint permettant la notification de votre appareil mobile. Les notifications
 ## À faire
 - [ ] Ajouter les logo des marque
 - [x] Créer des blueprint
-- [ ] Ajouter sensor de tendance
+- [x] Ajouter sensor de tendance
 - [ ] Consolider traduction
 - [ ] Automatisation de zone et de proximité
 - [ ] Ajout de possibilités de conversion de devise (utile pour les touriste)
