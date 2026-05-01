@@ -1,13 +1,11 @@
 {
   "domain": "regie_essence_quebec",
   "name": "Régie Essence Québec",
-  "codeowners": [
-    "@moimeme81"
-  ],
+  "codeowners": ["@moimeme81"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/moimeme81/essence-quebec-home-assistant",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/moimeme81/essence-quebec-home-assistant/issues",
-  "version": "0.1.0"
+  "version": "0.1.1"
 }
