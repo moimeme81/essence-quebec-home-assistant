@@ -1,0 +1,30 @@
+name: Validation Home Assistant & HACS
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  hacs:
+    name: Validation HACS
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Checkout du code
+        uses: "actions/checkout@v4"
+      - name: Vérification des règles HACS
+        uses: "hacs/action@main"
+        with:
+          category: "integration"
+
+  hassfest:
+    name: Validation Hassfest (Home Assistant)
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Checkout du code
+        uses: "actions/checkout@v4"
+      - name: Vérification de l'intégration
+        uses: "home-assistant/actions/hassfest@master"
