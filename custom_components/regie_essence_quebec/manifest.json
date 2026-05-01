@@ -1,7 +1,6 @@
 {
   "domain": "regie_essence_quebec",
   "name": "Régie Essence Québec",
-  "version": "0.1.1",
   "codeowners": ["@moimeme81"],
   "config_flow": true,
   "dependencies": [],
