@@ -1,21 +1,28 @@
 """The Régie Essence Québec integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
-import math
-import re
 from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.core import SupportsResponse
 
-from .const import DOMAIN
+from .const import (
+    CONF_ADDRESS,
+    CONF_SCAN_INTERVAL,
+    DATA_COORDINATOR,
+    DEFAULT_SCAN_INTERVAL_MINUTES,
+    DOMAIN,
+    MAX_SEARCH_RADIUS_KM,
+)
 from .coordinator import RegieEssenceCoordinator
+from .helpers import normalize_fuel, search_stations
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,38 +30,57 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
+DATA_LOCK = "lock"
+
 SERVICE_FIND_CLOSEST = "find_closest_stations"
 SERVICE_FIND_CLOSEST_SCHEMA = vol.Schema(
     {
-        vol.Required("latitude"): vol.Coerce(float),
-        vol.Required("longitude"): vol.Coerce(float),
+        vol.Required("latitude"): cv.latitude,
+        vol.Required("longitude"): cv.longitude,
         vol.Optional("limit", default=3): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
-        vol.Optional("radius", default=10.0): vol.All(vol.Coerce(float), vol.Range(min=1, max=200)),
+        vol.Optional("radius", default=10.0): vol.All(
+            vol.Coerce(float), vol.Range(min=1, max=MAX_SEARCH_RADIUS_KM)
+        ),
         vol.Optional("gas_type", default="Régulier"): cv.string,
     }
 )
 
 
+def _domain_data(hass: HomeAssistant) -> dict[str, Any]:
+    data = hass.data.setdefault(DOMAIN, {})
+    data.setdefault(DATA_LOCK, asyncio.Lock())
+    return data
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration from YAML (not used)."""
-    hass.data.setdefault(DOMAIN, {})
-    await _async_register_services(hass)
+    """Set up the integration (services are global, registered once)."""
+    _domain_data(hass)
+    _async_register_services(hass)
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Régie Essence Québec from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
+    """Set up one monitored station, sharing the province-wide coordinator."""
+    domain_data = _domain_data(hass)
 
-    coordinator = RegieEssenceCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
+    async with domain_data[DATA_LOCK]:
+        coordinator: RegieEssenceCoordinator | None = domain_data.get(DATA_COORDINATOR)
+        if coordinator is None:
+            coordinator = RegieEssenceCoordinator(hass)
+            domain_data[DATA_COORDINATOR] = coordinator
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+        coordinator.register_entry(entry)
+
+        if coordinator.data is None:
+            await coordinator.async_refresh()
+            if not coordinator.last_update_success:
+                coordinator.unregister_entry(entry.entry_id)
+                raise ConfigEntryNotReady("Could not download Régie Essence Québec data")
+        else:
+            await coordinator.async_apply_trends_for(entry.data.get(CONF_ADDRESS, ""))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-
-    await _async_register_services(hass)
     return True
 
 
@@ -62,96 +88,53 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
+        domain_data = _domain_data(hass)
+        coordinator: RegieEssenceCoordinator | None = domain_data.get(DATA_COORDINATOR)
+        if coordinator is not None:
+            coordinator.unregister_entry(entry.entry_id)
+            if not coordinator.has_entries:
+                domain_data.pop(DATA_COORDINATOR, None)
     return unload_ok
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload a config entry."""
+    """Reload a config entry when its options change."""
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def _async_register_services(hass: HomeAssistant) -> None:
+def _async_register_services(hass: HomeAssistant) -> None:
     """Register integration services once."""
     if hass.services.has_service(DOMAIN, SERVICE_FIND_CLOSEST):
         return
 
-    async def find_closest_stations(call: ServiceCall) -> dict[str, Any]:
-        raw_lat = call.data.get("latitude")
-        raw_lon = call.data.get("longitude")
-        limit = int(call.data.get("limit", 3))
-        radius = float(call.data.get("radius", 10.0))
-        gas_type = str(call.data.get("gas_type", "Régulier")).strip().lower()
-
-        if raw_lat is None or raw_lon is None:
-            raise ValueError("Could not read GPS coordinates.")
-
-        lat = float(raw_lat)
-        lon = float(raw_lon)
-
-        if lat == 0 or lon == 0:
-            raise ValueError("Latitude and longitude cannot be zero.")
-
-        domain_data = hass.data.get(DOMAIN, {})
-        if not domain_data:
-            raise ValueError("No configured integration entry is available.")
-
-        # Use any active coordinator's client to access shared API fetch logic.
-        coordinator: RegieEssenceCoordinator = next(iter(domain_data.values()))
-        stations = await coordinator._client.async_get_all_stations()
-        valid_stations: list[dict[str, Any]] = []
-
-        target_types = [gas_type]
-        if gas_type in ["régulier", "regulier", "ordinaire"]:
-            target_types = ["régulier", "regulier", "ordinaire"]
-        elif gas_type in ["diesel", "diésel"]:
-            target_types = ["diesel", "diésel"]
-
-        for station in stations:
-            s_lat = station.get("latitude", 0)
-            s_lon = station.get("longitude", 0)
-            if not s_lat or not s_lon:
-                continue
-
-            earth_radius_km = 6371.0
-            dlat = math.radians(s_lat - lat)
-            dlon = math.radians(s_lon - lon)
-            
-            a = (
-                (math.sin(dlat / 2) ** 2)
-                + math.cos(math.radians(lat))
-                * math.cos(math.radians(s_lat))
-                * (math.sin(dlon / 2) ** 2)
+    async def find_closest_stations(call: ServiceCall) -> ServiceResponse:
+        fuel_id = normalize_fuel(call.data["gas_type"])
+        if fuel_id is None:
+            raise ServiceValidationError(
+                f"Unknown gas type '{call.data['gas_type']}'. Use Régulier, Super or Diesel."
             )
-            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-            distance_km = round(earth_radius_km * c, 2)
 
-            if distance_km > radius:
-                continue
+        coordinator: RegieEssenceCoordinator | None = hass.data.get(DOMAIN, {}).get(DATA_COORDINATOR)
+        if coordinator is None:
+            raise ServiceValidationError(
+                "Add at least one station to the Régie Essence Québec integration first."
+            )
+        if coordinator.data is None:
+            await coordinator.async_refresh()
+        if not coordinator.data:
+            raise HomeAssistantError("No station data available from the Régie yet.")
 
-            station_with_distance = dict(station)
-            station_with_distance["distance_km"] = distance_km
+        limit: int = call.data["limit"]
+        valid = search_stations(
+            list(coordinator.data.values()),
+            call.data["latitude"],
+            call.data["longitude"],
+            call.data["radius"],
+            fuel_id,
+        )
 
-            for price_item in station.get("Prices", []):
-                actual_type = str(price_item.get("GasType", "")).strip().lower()
-                if actual_type not in target_types:
-                    continue
-
-                raw_price = str(price_item.get("Price", ""))
-                match = re.search(r"([\d\.]+)", raw_price)
-                if not match:
-                    continue
-
-                station_with_distance["target_price"] = float(match.group(1))
-                valid_stations.append(station_with_distance)
-                break
-
-        by_distance = sorted(valid_stations, key=lambda item: item.get("distance_km", 99999))
-        by_price = sorted(
-            valid_stations,
-            key=lambda item: (item.get("target_price", 999.9), item.get("distance_km", 99999)),
-         )
-
+        by_distance = sorted(valid, key=lambda s: s["distance_km"])
+        by_price = sorted(valid, key=lambda s: (s["target_price"], s["distance_km"]))
         return {"closest": by_distance[:limit], "cheapest": by_price[:limit]}
 
     hass.services.async_register(
@@ -161,15 +144,33 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         schema=SERVICE_FIND_CLOSEST_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
-    _LOGGER.debug("Registered %s.%s service", DOMAIN, SERVICE_FIND_CLOSEST)
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Migrate old config entries to the new version."""
-    _LOGGER.debug("Migrating from version %s to 5", config_entry.version)
-    
-    if config_entry.version < 5:
-        hass.config_entries.async_update_entry(config_entry, version=5)
-        
-    _LOGGER.debug("Migration to version 5 successful")
+    """Migrate old config entries."""
+    _LOGGER.debug("Migrating config entry from version %s", config_entry.version)
+
+    if config_entry.version < 6:
+        data = dict(config_entry.data)
+        # 5 minutes was the hard-coded default (never user-chosen in the setup flow).
+        if data.get(CONF_SCAN_INTERVAL) == 5:
+            data[CONF_SCAN_INTERVAL] = DEFAULT_SCAN_INTERVAL_MINUTES
+
+        # Give the entry a unique id (its address) so the same station can't be added twice.
+        address = data.get(CONF_ADDRESS)
+        unique_id = config_entry.unique_id
+        if unique_id is None and address:
+            taken = any(
+                other.unique_id == address
+                for other in hass.config_entries.async_entries(DOMAIN)
+                if other.entry_id != config_entry.entry_id
+            )
+            if not taken:
+                unique_id = address
+
+        hass.config_entries.async_update_entry(
+            config_entry, data=data, unique_id=unique_id, version=6
+        )
+
+    _LOGGER.debug("Migration to version %s successful", config_entry.version)
     return True

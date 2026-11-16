@@ -1,25 +1,32 @@
 """Sensor platform for Régie Essence Québec."""
-import logging
-import re
+from __future__ import annotations
+
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import DOMAIN, CONF_ADDRESS
+from .const import CONF_ADDRESS, DATA_COORDINATOR, DOMAIN, TREND_STABLE, TRENDS
 from .coordinator import RegieEssenceCoordinator
+from .helpers import find_price_item, get_city, parse_price
 
-_LOGGER = logging.getLogger(__name__)
-
-FUEL_TYPES = {
-    "regular": {"name": "Ordinaire", "icon": "mdi:gas-station", "gas_types": ["Régulier", "Regulier", "Ordinaire"]},
-    "super": {"name": "Super", "icon": "mdi:gas-station-outline", "gas_types": ["Super", "Premium", "Suprême"]},
-    "diesel": {"name": "Diesel", "icon": "mdi:truck", "gas_types": ["Diesel", "Diésel"]},
+FUEL_TYPES: dict[str, dict[str, str]] = {
+    "regular": {"name": "Ordinaire", "icon": "mdi:gas-station"},
+    "super": {"name": "Super", "icon": "mdi:gas-station-outline"},
+    "diesel": {"name": "Diesel", "icon": "mdi:truck"},
 }
+
+TREND_ICONS = {
+    "up": "mdi:trending-up",
+    "down": "mdi:trending-down",
+    "stable": "mdi:trending-neutral",
+}
+TREND_ARROWS = {"up": "📈", "down": "📉", "stable": "➖"}
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -27,71 +34,53 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor platform."""
-    coordinator: RegieEssenceCoordinator = hass.data[DOMAIN][entry.entry_id]
-    
-    sensors = []
+    coordinator: RegieEssenceCoordinator = hass.data[DOMAIN][DATA_COORDINATOR]
+
+    sensors: list[SensorEntity] = []
     for fuel_id, fuel_info in FUEL_TYPES.items():
-        # Entité 1 : Le prix
         sensors.append(FuelPriceSensor(coordinator, entry, fuel_id, fuel_info))
-        # Entité 2 : La tendance
         sensors.append(FuelTrendSensor(coordinator, entry, fuel_id, fuel_info))
-        
     async_add_entities(sensors)
 
-class FuelPriceSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a Fuel Price Sensor."""
-    
-    _attr_has_entity_name = True 
-    _attr_native_unit_of_measurement = "¢/L"
-    _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator: RegieEssenceCoordinator, entry: ConfigEntry, fuel_id: str, fuel_info: dict):
+class StationEntity(CoordinatorEntity[RegieEssenceCoordinator]):
+    """Common logic for entities attached to one monitored station."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: RegieEssenceCoordinator,
+        entry: ConfigEntry,
+        fuel_id: str,
+        fuel_info: dict[str, str],
+    ) -> None:
         super().__init__(coordinator)
         self._entry = entry
+        self._address: str = entry.data.get(CONF_ADDRESS, "")
         self._fuel_id = fuel_id
         self._fuel_info = fuel_info
-        
-        self._attr_name = fuel_info["name"]
-        self._attr_icon = fuel_info["icon"]
-        self._attr_unique_id = f"{entry.entry_id}_{fuel_id}"
 
-    def _get_city(self, address: str) -> str:
-        if not address: return "Inconnu"
-        parts = address.split(",")
-        return parts[-1].strip() if len(parts) > 1 else address.strip()
-
-    def _station(self) -> dict | None:
-        """Helper to find the specific station data in the coordinator dictionary."""
-        if self.coordinator.data is None:
+    def _station(self) -> dict[str, Any] | None:
+        if not self.coordinator.data:
             return None
-        address = self._entry.data.get(CONF_ADDRESS)
-        return self.coordinator.data.get(address)
+        return self.coordinator.data.get(self._address)
 
-    def _get_price_item(self) -> dict | None:
-        """Helper to find the specific fuel type block in the station data."""
-        station = self._station()
-        if not station or "Prices" not in station:
-            return None
+    def _price_item(self) -> dict[str, Any] | None:
+        return find_price_item(self._station(), self._fuel_id)
 
-        for price_item in station.get("Prices", []):
-            actual_type = str(price_item.get("GasType", "")).strip().lower()
-            target_types = [t.lower() for t in self._fuel_info["gas_types"]]
-            
-            if actual_type in target_types:
-                return price_item
-        return None
+    @property
+    def available(self) -> bool:
+        return super().available and self._station() is not None
 
     @property
     def device_info(self) -> DeviceInfo:
         station = self._station()
-        address = self._entry.data.get(CONF_ADDRESS, "Station Inconnue")
         brand = "Régie Essence Québec"
-        name = address
-        
+        name = self._address or "Station Inconnue"
         if station:
-            brand = station.get("brand", brand)
-            name = f"{brand} - {self._get_city(address)}"
-            
+            brand = station.get("brand") or brand
+            name = f"{brand} - {get_city(self._address)}"
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry.entry_id)},
             name=name,
@@ -99,98 +88,66 @@ class FuelPriceSensor(CoordinatorEntity, SensorEntity):
             model="Station Service",
         )
 
+
+class FuelPriceSensor(StationEntity, SensorEntity):
+    """Price of one fuel at the monitored station."""
+
+    _attr_native_unit_of_measurement = "¢/L"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, coordinator, entry, fuel_id, fuel_info) -> None:
+        super().__init__(coordinator, entry, fuel_id, fuel_info)
+        self._attr_name = fuel_info["name"]
+        self._attr_icon = fuel_info["icon"]
+        self._attr_unique_id = f"{entry.entry_id}_{fuel_id}"
+
     @property
     def native_value(self) -> float | None:
-        price_item = self._get_price_item()
-        if price_item:
-            raw_price = str(price_item.get("Price", ""))
-            match = re.search(r"([\d\.]+)", raw_price)
-            if match:
-                return float(match.group(1))
-        return None
+        item = self._price_item()
+        return parse_price(item.get("Price")) if item else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         station = self._station()
         if not station:
             return {}
-            
-        attrs = {
+
+        attrs: dict[str, Any] = {
             "station_name": station.get("Name"),
             "address": station.get("Address"),
             "region": station.get("Region"),
+            "status": station.get("Status"),
             "latitude": station.get("latitude"),
             "longitude": station.get("longitude"),
         }
-        
-        # On garde aussi la tendance en attribut au cas où
-        price_item = self._get_price_item()
-        if price_item:
-            tendency = price_item.get("Tendency", "stable")
+        item = self._price_item()
+        if item:
+            tendency = item.get("Tendency", TREND_STABLE)
             attrs["tendency"] = tendency
-            arrows = {"up": "📈", "down": "📉", "stable": "➖"}
-            attrs["trend_arrow"] = arrows.get(tendency, "➖")
-            
+            attrs["trend_arrow"] = TREND_ARROWS.get(tendency, "➖")
+            attrs["is_available"] = item.get("IsAvailable")
         return attrs
 
-class FuelTrendSensor(CoordinatorEntity, SensorEntity):
-    """Capteur dédié à la tendance du prix (Hausse/Baisse)."""
-    
-    _attr_has_entity_name = True 
 
-    def __init__(self, coordinator: RegieEssenceCoordinator, entry: ConfigEntry, fuel_id: str, fuel_info: dict):
-        super().__init__(coordinator)
-        self._entry = entry
-        self._fuel_id = fuel_id
-        self._fuel_info = fuel_info
-        
+class FuelTrendSensor(StationEntity, SensorEntity):
+    """Direction of the last price change (up / down / stable)."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = TRENDS
+    _attr_translation_key = "trend"
+
+    def __init__(self, coordinator, entry, fuel_id, fuel_info) -> None:
+        super().__init__(coordinator, entry, fuel_id, fuel_info)
         self._attr_name = f"Tendance {fuel_info['name']}"
         self._attr_unique_id = f"{entry.entry_id}_{fuel_id}_trend"
 
-    def _get_city(self, address: str) -> str:
-        if not address: return "Inconnu"
-        parts = address.split(",")
-        return parts[-1].strip() if len(parts) > 1 else address.strip()
-
-    def _station(self) -> dict | None:
-        if self.coordinator.data is None:
-            return None
-        address = self._entry.data.get(CONF_ADDRESS)
-        return self.coordinator.data.get(address)
+    @property
+    def native_value(self) -> str:
+        item = self._price_item()
+        trend = item.get("Tendency", TREND_STABLE) if item else TREND_STABLE
+        return trend if trend in TRENDS else TREND_STABLE
 
     @property
     def icon(self) -> str:
-        arrows = {"up": "mdi:trending-up", "down": "mdi:trending-down", "stable": "mdi:trending-neutral"}
-        return arrows.get(self.native_value, "mdi:trending-neutral")
-
-    @property
-    def native_value(self) -> str:
-        station = self._station()
-        if not station:
-            return "stable"
-
-        for price_item in station.get("Prices", []):
-            actual_type = str(price_item.get("GasType", "")).strip().lower()
-            target_types = [t.lower() for t in self._fuel_info["gas_types"]]
-            if actual_type in target_types:
-                return price_item.get("Tendency", "stable")
-        return "stable"
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        station = self._station()
-        address = self._entry.data.get(CONF_ADDRESS, "Station Inconnue")
-        brand = "Régie Essence Québec"
-        name = address
-        
-        if station:
-            brand = station.get("brand", brand)
-            name = f"{brand} - {self._get_city(address)}"
-            
-        # L'utilisation du même identifier relie cette entité au même appareil que le prix
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._entry.entry_id)},
-            name=name,
-            manufacturer=brand,
-            model="Station Service",
-        )
+        return TREND_ICONS.get(self.native_value, "mdi:trending-neutral")
