@@ -104,6 +104,56 @@
         "gas_type": {
           "name": "Type d'essence",
           "description": "Carburant utilisé pour trouver le meilleur prix."
+        },
+        "exclude_brands": {
+          "name": "Exclure des marques",
+          "description": "Marques à ignorer (ex: Costco si vous n'êtes pas membre)."
+        }
+      }
+    },
+    "find_stations_ahead": {
+      "name": "Trouver les stations devant moi",
+      "description": "En conduisant, retourne les stations devant vous selon votre position GPS et votre direction.",
+      "fields": {
+        "latitude": {
+          "name": "Latitude",
+          "description": "Latitude actuelle."
+        },
+        "longitude": {
+          "name": "Longitude",
+          "description": "Longitude actuelle."
+        },
+        "heading": {
+          "name": "Direction",
+          "description": "Direction en degrés (0 = nord, 90 = est). L'application compagnon la fournit dans l'attribut « course »."
+        },
+        "distance": {
+          "name": "Distance devant (km)",
+          "description": "Jusqu'où chercher devant vous."
+        },
+        "max_offset": {
+          "name": "Écart latéral max (km)",
+          "description": "Distance maximale d'une station de chaque côté de votre direction. Augmente de 15 % de la distance devant pour suivre les courbes."
+        },
+        "limit": {
+          "name": "Limite",
+          "description": "Nombre de stations retournées par liste."
+        },
+        "gas_type": {
+          "name": "Type d'essence",
+          "description": "Carburant recherché."
+        },
+        "exclude_brands": {
+          "name": "Exclure des marques",
+          "description": "Marques à ignorer (ex: Costco si vous n'êtes pas membre)."
+        },
+        "fill_liters": {
+          "name": "Litres à faire",
+          "description": "Sert à comparer le détour au prix pour la liste « meilleure valeur »."
+        },
+        "consumption": {
+          "name": "Consommation (L/100 km)",
+          "description": "Sert à estimer le coût du détour."
         }
       }
     }

@@ -104,6 +104,56 @@
         "gas_type": {
           "name": "Gas type",
           "description": "Which fuel type to search for to find the cheapest price."
+        },
+        "exclude_brands": {
+          "name": "Exclude brands",
+          "description": "Brands to leave out (e.g. Costco if you are not a member)."
+        }
+      }
+    },
+    "find_stations_ahead": {
+      "name": "Find stations ahead",
+      "description": "While driving, returns stations in front of you using your GPS position and heading.",
+      "fields": {
+        "latitude": {
+          "name": "Latitude",
+          "description": "Current latitude."
+        },
+        "longitude": {
+          "name": "Longitude",
+          "description": "Current longitude."
+        },
+        "heading": {
+          "name": "Heading",
+          "description": "Direction of travel in degrees (0 = north, 90 = east). The companion app reports it as the \"course\" attribute."
+        },
+        "distance": {
+          "name": "Distance ahead (km)",
+          "description": "How far ahead to look."
+        },
+        "max_offset": {
+          "name": "Max side offset (km)",
+          "description": "How far to the side of your direction a station may be. Grows by 15% of the distance ahead to follow curves."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Number of stations to return per list."
+        },
+        "gas_type": {
+          "name": "Gas type",
+          "description": "Which fuel type to search for."
+        },
+        "exclude_brands": {
+          "name": "Exclude brands",
+          "description": "Brands to leave out (e.g. Costco if you are not a member)."
+        },
+        "fill_liters": {
+          "name": "Litres to fill",
+          "description": "Used to weigh the detour against the price for the best value list."
+        },
+        "consumption": {
+          "name": "Fuel consumption (L/100 km)",
+          "description": "Used to estimate what the detour costs."
         }
       }
     }

@@ -1,12 +1,19 @@
 blueprint:
   name: Régie Essence - Chercher une station
-  description: "Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification avec navigation intégrée (Compatible Android Auto & Apple CarPlay)."
+  description: >
+    Génère un script qui cherche les stations d'essence selon vos critères et envoie une notification
+    avec navigation intégrée (compatible Android Auto & Apple CarPlay).
+
+
+    Les modes « Devant moi » utilisent la direction (course) et la vitesse rapportées par l'application
+    compagnon pour ne garder que les stations en avant de vous : idéal pendant que Waze ou Google Maps
+    vous guide. Si la direction est inconnue (à l'arrêt), le script cherche autour de vous.
   domain: script
   source_url: https://raw.githubusercontent.com/moimeme81/essence-quebec-home-assistant/refs/heads/main/blueprint/script/find_gas.yaml
   input:
     location_entity:
       name: Entité de localisation (GPS)
-      description: "Choisissez la personne ou le téléphone (device_tracker) pour utiliser sa position."
+      description: "Choisissez la personne ou le téléphone (device_tracker) pour utiliser sa position. Les modes « Devant moi » ont besoin d'un téléphone avec l'application compagnon (une personne liée à ce téléphone fonctionne aussi)."
       selector:
         entity:
           domain:
@@ -23,6 +30,12 @@ blueprint:
               value: "cheapest"
             - label: Les plus proches (Distance)
               value: "closest"
+            - label: Devant moi - Meilleure valeur (prix + détour)
+              value: "ahead_best"
+            - label: Devant moi - Les moins chères
+              value: "ahead_cheapest"
+            - label: Devant moi - Les prochaines sur ma route
+              value: "ahead_next"
     gas_type:
       name: Type d'essence
       default: "Régulier"
@@ -49,6 +62,27 @@ blueprint:
           min: 1
           max: 100
           step: 1
+          mode: slider
+    ahead_distance:
+      name: Distance devant (km) - modes « Devant moi »
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 100
+          step: 5
+          unit_of_measurement: km
+          mode: slider
+    max_offset:
+      name: Écart latéral max (km) - modes « Devant moi »
+      description: "Distance maximale d'une station de chaque côté de votre direction. S'élargit automatiquement avec la distance pour suivre les courbes."
+      default: 2
+      selector:
+        number:
+          min: 0.5
+          max: 10
+          step: 0.5
+          unit_of_measurement: km
           mode: slider
     limit:
       name: Nombre de résultats
@@ -98,9 +132,27 @@ sequence:
       nav_app: !input nav_app
       device_os: !input device_os
       has_costco: !input has_costco
+      gas_type: !input gas_type
+      ahead_distance: !input ahead_distance
+      max_offset: !input max_offset
       raw_phone_entity: !input notify_phone
       notify_service: "{{ raw_phone_entity | replace('device_tracker.', 'notify.mobile_app_') }}"
       lat: "{{ state_attr(location_entity, 'latitude') | float(0) }}"
+      # A person has no heading: read it from the device tracker the person is currently using.
+      motion_entity: >
+        {% if location_entity.startswith('person.') and state_attr(location_entity, 'source') %}
+          {{ state_attr(location_entity, 'source') }}
+        {% else %}
+          {{ location_entity }}
+        {% endif %}
+      course: "{{ state_attr(motion_entity | trim, 'course') }}"
+      speed: "{{ state_attr(motion_entity | trim, 'speed') }}"
+      # Direction is only meaningful while moving (speed in m/s; > ~7 km/h).
+      heading_known: >
+        {{ course is number and 0 <= course <= 360
+           and (speed is not number or speed >= 2) }}
+      is_ahead: "{{ search_mode.startswith('ahead') and heading_known }}"
+      ahead_fallback: "{{ search_mode.startswith('ahead') and not heading_known }}"
       # Unique action ids per run, so a tap on an older notification (or another phone) is ignored.
       action_nav_1: "{{ 'NAV_STATION_1_' ~ context.id }}"
       action_nav_2: "{{ 'NAV_STATION_2_' ~ context.id }}"
@@ -110,35 +162,55 @@ sequence:
   - condition: template
     value_template: "{{ lat != 0 and lon != 0 }}"
 
-  # On demande 10 résultats à l'API pour être sûr d'en avoir assez même après avoir retiré Costco
-  - action: regie_essence_quebec.find_closest_stations
-    data:
-      latitude: "{{ lat }}"
-      longitude: "{{ lon }}"
-      radius: !input radius
-      limit: 10 
-      gas_type: !input gas_type
+  - action: >
+      {{ 'regie_essence_quebec.find_stations_ahead' if is_ahead
+         else 'regie_essence_quebec.find_closest_stations' }}
+    data: >
+      {% set common = {
+        'latitude': lat, 'longitude': lon, 'gas_type': gas_type,
+        'limit': limit_val | int, 'exclude_brands': [] if has_costco else ['costco']
+      } %}
+      {% if is_ahead %}
+        {{ dict(common, heading=course, distance=ahead_distance, max_offset=max_offset) }}
+      {% else %}
+        {{ dict(common, radius=radius_km) }}
+      {% endif %}
     response_variable: gas_results
 
   - variables:
-      # Logique Jinja2 propre : on récupère les données, on filtre Costco si nécessaire, puis on limite au nombre choisi.
       stations: >
-        {% set raw = gas_results.closest if search_mode == 'closest' else gas_results.cheapest %}
-        {% set filtered = raw | rejectattr('brand', 'search', 'costco', true) | list if not has_costco else raw %}
-        {{ filtered[:(limit_val | int)] }}
-        
+        {% if is_ahead %}
+          {% set key = {'ahead_best': 'best_value', 'ahead_cheapest': 'cheapest'}.get(search_mode, 'next') %}
+        {% elif search_mode in ['closest', 'ahead_next'] %}
+          {% set key = 'closest' %}
+        {% else %}
+          {% set key = 'cheapest' %}
+        {% endif %}
+        {{ gas_results[key] }}
+      # Distance shown on each line / button: along the road ahead, or straight-line around you.
+      km_list: >
+        {{ stations | map(attribute='ahead_km' if is_ahead else 'distance_km') | list }}
       gas_title: >
-        {% if search_mode == 'closest' %}
+        {% if is_ahead %}
+          {{ {'ahead_best': 'Meilleure valeur devant', 'ahead_cheapest': 'Moins chères devant'}.get(search_mode, 'Prochaines stations devant') }}
+        {% elif ahead_fallback %}
+          Direction inconnue : stations autour de vous
+        {% elif search_mode == 'closest' %}
           Stations les plus proches
         {% else %}
           Stations les moins chères
         {% endif %}
       gas_message: >
         {% if stations | length == 0 %}
-          Aucune station trouvée dans un rayon de {{ radius_km }} km.
+          {% if is_ahead %}Aucune station trouvée dans les {{ ahead_distance }} km devant vous.
+          {% else %}Aucune station trouvée dans un rayon de {{ radius_km }} km.{% endif %}
         {% else %}
           {% for s in stations %}
+            {% if is_ahead %}
+            {{ loop.index }}. {{ s.brand }} ({{ s.Address.split(',')[-1] | trim }}) dans {{ s.ahead_km }}km : {{ s.target_price }}¢/L
+            {% else %}
             {{ loop.index }}. {{ s.brand }} à {{ s.distance_km }}km : {{ s.target_price }}¢/L
+            {% endif %}
           {% endfor %}
         {% endif %}
       uri_1: >
@@ -227,13 +299,13 @@ sequence:
                 clickAction: "{{ uri_1 | trim }}"
                 actions:
                   - action: "{{ action_nav_1 }}"
-                    title: "📍 #1 {{ stations[0].brand }} ({{ stations[0].distance_km }}km)"
+                    title: "📍 #1 {{ stations[0].brand }} ({{ km_list[0] }}km)"
                   - action: >
                       {% if stations | length > 1 %}{{ action_nav_2 }}{% else %}IGNORE{% endif %}
-                    title: "📍 #2 {{ stations[1].brand if stations | length > 1 else '—' }} ({{ stations[1].distance_km if stations | length > 1 else '' }}km)"
+                    title: "📍 #2 {{ stations[1].brand if stations | length > 1 else '—' }} ({{ km_list[1] if stations | length > 1 else '' }}km)"
                   - action: >
                       {% if stations | length > 2 %}{{ action_nav_3 }}{% else %}IGNORE{% endif %}
-                    title: "📍 #3 {{ stations[2].brand if stations | length > 2 else '—' }} ({{ stations[2].distance_km if stations | length > 2 else '' }}km)"
+                    title: "📍 #3 {{ stations[2].brand if stations | length > 2 else '—' }} ({{ km_list[2] if stations | length > 2 else '' }}km)"
 
           - wait_for_trigger:
               - platform: event

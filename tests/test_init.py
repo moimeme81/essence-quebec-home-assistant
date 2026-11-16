@@ -159,3 +159,37 @@ async def test_config_flow_hides_and_rejects_configured(hass: HomeAssistant, fee
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+# Driving east toward stations A and B (both ~15 km ahead), C is far away in Gaspé.
+WEST_OF_QUEBEC = {"latitude": 46.80, "longitude": -71.40}
+
+
+async def test_find_stations_ahead_service(hass: HomeAssistant, feed) -> None:
+    await _setup(hass, _entry(ADDR_A))
+    result = await hass.services.async_call(
+        DOMAIN,
+        "find_stations_ahead",
+        {**WEST_OF_QUEBEC, "heading": 90, "distance": 30, "gas_type": "Régulier"},
+        blocking=True,
+        return_response=True,
+    )
+    assert [s["Address"] for s in result["next"]] == [ADDR_B, ADDR_A]
+    assert result["cheapest"][0]["Address"] == ADDR_B
+    assert result["best_value"][0]["Address"] == ADDR_B
+    assert result["next"][0]["ahead_km"] > 10
+
+    # Heading west: everything is behind us.
+    result = await hass.services.async_call(
+        DOMAIN, "find_stations_ahead", {**WEST_OF_QUEBEC, "heading": 270},
+        blocking=True, return_response=True,
+    )
+    assert result["next"] == []
+
+    # Brand exclusion.
+    result = await hass.services.async_call(
+        DOMAIN, "find_stations_ahead",
+        {**WEST_OF_QUEBEC, "heading": 90, "exclude_brands": ["costco"]},
+        blocking=True, return_response=True,
+    )
+    assert [s["Address"] for s in result["next"]] == [ADDR_A]
