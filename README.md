@@ -13,7 +13,7 @@ Une intégration personnalisée pour Home Assistant qui récupère en temps rée
 
 * **Configuration simple (UI) :** Fini le YAML ! Cherchez et sélectionnez votre/vos station directement via des menus déroulants (Région > Ville > Bannière > Station). Sinon, via la recherche avancée qui permet de voir toute les stations d'une bannière par exemple ou en écrivant l'adresse directement (match partiel possible)
 * **Trois types de carburant :** Crée automatiquement des capteurs pour l'essence Ordinaire, Super et le Diesel.
-* **Mise à jour paramétrable :** Choisissez la fréquence de rafraîchissement (par défaut : 60 minutes, minimum : 5 minutes).
+* **Mise à jour paramétrable :** Choisissez la fréquence de rafraîchissement (par défaut : 60 minutes, minimum : 15 minutes). Toutes vos stations partagent un seul téléchargement des données de la Régie; l'intervalle le plus court est utilisé.
 * **Coordonnées GPS intégrées :** Les capteurs incluent la latitude et la longitude, permettant une intégration native avec la carte (Map) de Home Assistant.
 * **Moteur de recherche intelligent :** Inclut un service personnalisé (`regie_essence_quebec.find_closest_stations`) capable de calculer en temps réel les stations les plus proches ou les moins chères dans un rayon donné autour de vous !
 * **Notification :** Affichage sur écran de navigation et lien avec app de navigation (iphone/carplay à tester)
@@ -75,7 +75,7 @@ Options configurables du service :
 
 `limit` : Nombre de stations à retourner (ex: 3).
 
-`radius` : Rayon de recherche en kilomètres (ex: 10). 
+`radius` : Rayon de recherche en kilomètres (ex: 10, maximum 100).
 
 `gas_type` : Type d'essence recherché (`Régulier`, `Super`, ou `Diesel`).
 
@@ -121,6 +121,13 @@ Blueprint permettant la notification de votre appareil mobile. Les notifications
 - [ ] Automatisation de zone et de proximité
 - [ ] Ajout de possibilités de conversion de devise (utile pour les touriste)
 
+
+## Développement
+
+```bash
+pip install -r requirements_test.txt
+pytest
+```
 
 ## Mentions légales
 Cette intégration n'est pas affiliée à la Régie de l'énergie du Québec ni au gouvernement du Québec. Elle extrait simplement les données publiques rendues disponibles sur leur carte interactive.

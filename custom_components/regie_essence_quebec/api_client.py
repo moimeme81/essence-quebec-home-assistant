@@ -1,70 +1,60 @@
-"""API client for Régie Essence Québec (Direct Connection)."""
-import logging
+"""API client for Régie Essence Québec (direct connection to the public feed)."""
+from __future__ import annotations
+
 import gzip
 import json
+import logging
 from typing import Any
 
 import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
 
-# Direct link to the government data
 GEOJSON_URL = "https://regieessencequebec.ca/stations.geojson.gz"
+USER_AGENT = "HomeAssistant-RegieEssenceQuebec (+https://github.com/moimeme81/essence-quebec-home-assistant)"
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+
 
 class RegieEssenceClient:
-    """Async client that communicates directly with the Régie server."""
+    """Async client that downloads and parses the province-wide station file."""
 
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self._session = session
 
-    async def _fetch_and_parse(self) -> list[dict[str, Any]]:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        
+    async def async_get_all_stations(self) -> list[dict[str, Any]]:
+        """Fetch every station in Québec."""
         try:
-            async with self._session.get(GEOJSON_URL, headers=headers) as response:
+            async with self._session.get(
+                GEOJSON_URL, headers={"User-Agent": USER_AGENT}, timeout=REQUEST_TIMEOUT
+            ) as response:
                 response.raise_for_status()
                 content = await response.read()
-                
-                try:
-                    json_text = gzip.decompress(content).decode('utf-8')
-                except OSError:
-                    json_text = content.decode('utf-8')
-                    
-                data = json.loads(json_text)
-                features = data.get("features", [])
-                
-                stations = []
-                for feature in features:
-                    props = feature.get("properties", {})
-                    coords = feature.get("geometry", {}).get("coordinates", [0, 0])
-                    
-                    stations.append({
-                        "Name": props.get("Name", ""),
-                        "brand": props.get("brand", ""),
-                        "Address": props.get("Address", ""),
-                        "Region": props.get("Region", ""),
-                        "latitude": coords[1] if len(coords) > 1 else 0,
-                        "longitude": coords[0] if len(coords) > 0 else 0,
-                        "Prices": props.get("Prices", [])
-                    })
-                return stations
-                
-        except Exception as err:
-            _LOGGER.error("Error fetching data directly from Régie: %s", err)
+        except (aiohttp.ClientError, TimeoutError) as err:
+            _LOGGER.error("Error fetching data from Régie: %s", err)
             raise
 
-    async def async_get_all_stations(self) -> list[dict[str, Any]]:
-        """Fetch all stations for the setup dropdowns."""
-        return await self._fetch_and_parse()
+        try:
+            json_text = gzip.decompress(content).decode("utf-8")
+        except OSError:
+            # Some proxies/servers transparently decompress already.
+            json_text = content.decode("utf-8")
 
-    async def async_get_station(
-        self, address: str, lat: float | None = None, lon: float | None = None
-    ) -> dict[str, Any] | None:
-        """Fetch all stations and filter down to the specific one being monitored."""
-        stations = await self._fetch_and_parse()
-        for station in stations:
-            if station.get("Address") == address:
-                return station
-        return None
+        data = json.loads(json_text)
+        stations: list[dict[str, Any]] = []
+        for feature in data.get("features", []):
+            props = feature.get("properties") or {}
+            coords = (feature.get("geometry") or {}).get("coordinates") or [0, 0]
+            stations.append(
+                {
+                    "Name": props.get("Name", ""),
+                    "brand": props.get("brand", ""),
+                    "Status": props.get("Status", ""),
+                    "Address": props.get("Address", ""),
+                    "PostalCode": props.get("PostalCode", ""),
+                    "Region": props.get("Region", ""),
+                    "latitude": coords[1] if len(coords) > 1 else 0,
+                    "longitude": coords[0] if len(coords) > 0 else 0,
+                    "Prices": props.get("Prices") or [],
+                }
+            )
+        return stations

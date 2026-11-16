@@ -54,7 +54,8 @@
       "no_selection": "You must select at least one station."
     },
     "abort": {
-      "already_configured": "This station is already configured."
+      "already_configured": "This station is already configured.",
+      "cannot_connect": "Failed to connect to the Régie de l'énergie API."
     }
   },
   "options": {
@@ -63,6 +64,46 @@
         "title": "Configure Station Updates",
         "data": {
           "scan_interval": "Update interval (minutes)"
+        },
+        "description": "All stations share a single download; the shortest interval among your stations is used (minimum 15 minutes)."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "trend": {
+        "state": {
+          "up": "Rising",
+          "down": "Falling",
+          "stable": "Stable"
+        }
+      }
+    }
+  },
+  "services": {
+    "find_closest_stations": {
+      "name": "Find closest/cheapest stations",
+      "description": "Returns the closest and cheapest gas stations within a given radius.",
+      "fields": {
+        "latitude": {
+          "name": "Latitude",
+          "description": "The latitude to search from."
+        },
+        "longitude": {
+          "name": "Longitude",
+          "description": "The longitude to search from."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Number of stations to return per list."
+        },
+        "radius": {
+          "name": "Search radius (km)",
+          "description": "Maximum distance to search for stations."
+        },
+        "gas_type": {
+          "name": "Gas type",
+          "description": "Which fuel type to search for to find the cheapest price."
         }
       }
     }

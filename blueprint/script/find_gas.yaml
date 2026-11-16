@@ -101,6 +101,10 @@ sequence:
       raw_phone_entity: !input notify_phone
       notify_service: "{{ raw_phone_entity | replace('device_tracker.', 'notify.mobile_app_') }}"
       lat: "{{ state_attr(location_entity, 'latitude') | float(0) }}"
+      # Unique action ids per run, so a tap on an older notification (or another phone) is ignored.
+      action_nav_1: "{{ 'NAV_STATION_1_' ~ context.id }}"
+      action_nav_2: "{{ 'NAV_STATION_2_' ~ context.id }}"
+      action_nav_3: "{{ 'NAV_STATION_3_' ~ context.id }}"
       lon: "{{ state_attr(location_entity, 'longitude') | float(0) }}"
 
   - condition: template
@@ -222,28 +226,28 @@ sequence:
                 channel: driving_alerts
                 clickAction: "{{ uri_1 | trim }}"
                 actions:
-                  - action: NAV_STATION_1
+                  - action: "{{ action_nav_1 }}"
                     title: "📍 #1 {{ stations[0].brand }} ({{ stations[0].distance_km }}km)"
                   - action: >
-                      {% if stations | length > 1 %}NAV_STATION_2{% else %}IGNORE{% endif %}
+                      {% if stations | length > 1 %}{{ action_nav_2 }}{% else %}IGNORE{% endif %}
                     title: "📍 #2 {{ stations[1].brand if stations | length > 1 else '—' }} ({{ stations[1].distance_km if stations | length > 1 else '' }}km)"
                   - action: >
-                      {% if stations | length > 2 %}NAV_STATION_3{% else %}IGNORE{% endif %}
+                      {% if stations | length > 2 %}{{ action_nav_3 }}{% else %}IGNORE{% endif %}
                     title: "📍 #3 {{ stations[2].brand if stations | length > 2 else '—' }} ({{ stations[2].distance_km if stations | length > 2 else '' }}km)"
 
           - wait_for_trigger:
               - platform: event
                 event_type: mobile_app_notification_action
                 event_data:
-                  action: NAV_STATION_1
+                  action: "{{ action_nav_1 }}"
               - platform: event
                 event_type: mobile_app_notification_action
                 event_data:
-                  action: NAV_STATION_2
+                  action: "{{ action_nav_2 }}"
               - platform: event
                 event_type: mobile_app_notification_action
                 event_data:
-                  action: NAV_STATION_3
+                  action: "{{ action_nav_3 }}"
             timeout: "00:05:00"
             continue_on_timeout: false
 
@@ -251,8 +255,8 @@ sequence:
               tapped_uri: >
                 {% if wait.trigger is not none %}
                   {% set a = wait.trigger.event.data.action %}
-                  {% if a == 'NAV_STATION_1' %}{{ uri_1 | trim }}
-                  {% elif a == 'NAV_STATION_2' %}{{ uri_2 | trim }}
+                  {% if a == action_nav_1 %}{{ uri_1 | trim }}
+                  {% elif a == action_nav_2 %}{{ uri_2 | trim }}
                   {% else %}{{ uri_3 | trim }}
                   {% endif %}
                 {% endif %}
@@ -266,109 +270,3 @@ sequence:
               data:
                 intent_action: android.intent.action.VIEW
                 intent_uri: "{{ tapped_uri }}"
-          {% elif nav_app == 'apple_maps' %}http://maps.apple.com/?daddr={{ s.latitude }},{{ s.longitude }}
-          {% else %}https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}
-          {% endif %}
-        {% else %}{% endif %}
-
-  - choose:
-      # ==========================================
-      # SCENARIO A: NO STATIONS FOUND
-      # ==========================================
-      - conditions:
-          - condition: template
-            value_template: "{{ stations | length == 0 }}"
-        sequence:
-          - action: "{{ notify_service }}"
-            data:
-              title: "{{ gas_title }}"
-              message: "{{ gas_message }}"
-              data:
-                ttl: 0
-                priority: high
-                channel: driving_alerts
-                push:
-                  interruption-level: time-sensitive
-
-      # ==========================================
-      # SCENARIO B: STATIONS FOUND & iOS
-      # ==========================================
-      - conditions:
-          - condition: template
-            value_template: "{{ device_os == 'ios' }}"
-        sequence:
-          - action: "{{ notify_service }}"
-            data:
-              title: "{{ gas_title }}"
-              message: "{{ gas_message }}"
-              data:
-                push:
-                  interruption-level: time-sensitive
-                clickAction: "{{ uri_1 | trim }}"
-                actions: >
-                  {% set ns = namespace(btns=[]) %}
-                  {% for s in stations[:3] %}
-                    {% set uri = "" %}
-                    {% if loop.index == 1 %}{% set uri = uri_1 | trim %}
-                    {% elif loop.index == 2 %}{% set uri = uri_2 | trim %}
-                    {% else %}{% set uri = uri_3 | trim %}{% endif %}
-                    {% set ns.btns = ns.btns + [{"action": "URI", "title": "📍 #" ~ loop.index ~ " " ~ s.brand, "uri": uri}] %}
-                  {% endfor %}
-                  {{ ns.btns }}
-
-      # ==========================================
-      # SCENARIO C: STATIONS FOUND & ANDROID
-      # ==========================================
-      - conditions:
-          - condition: template
-            value_template: "{{ device_os == 'android' }}"
-        sequence:
-          - action: "{{ notify_service }}"
-            data:
-              title: "{{ gas_title }}"
-              message: "{{ gas_message }}"
-              data:
-                ttl: 0
-                priority: high
-                car_ui: true
-                channel: driving_alerts
-                clickAction: "{{ uri_1 | trim }}"
-                actions:
-                  - action: NAV_STATION_1
-                    title: "📍 #1 {{ stations[0].brand }} ({{ stations[0].distance_km }}km)"
-                  - action: NAV_STATION_2
-                    title: "📍 #2 {{ stations[1].brand if stations | length > 1 else '—' }} ({{ stations[1].distance_km if stations | length > 1 else '' }}km)"
-                  - action: NAV_STATION_3
-                    title: "📍 #3 {{ stations[2].brand if stations | length > 2 else '—' }} ({{ stations[2].distance_km if stations | length > 2 else '' }}km)"
-
-          - wait_for_trigger:
-              - platform: event
-                event_type: mobile_app_notification_action
-                event_data:
-                  action: NAV_STATION_1
-              - platform: event
-                event_type: mobile_app_notification_action
-                event_data:
-                  action: NAV_STATION_2
-              - platform: event
-                event_type: mobile_app_notification_action
-                event_data:
-                  action: NAV_STATION_3
-            timeout: "00:05:00"
-            continue_on_timeout: false
-
-          - variables:
-              tapped_uri: >
-                {% set a = wait.trigger.event.data.action %}
-                {% if a == 'NAV_STATION_1' %}{{ uri_1 | trim }}
-                {% elif a == 'NAV_STATION_2' %}{{ uri_2 | trim }}
-                {% else %}{{ uri_3 | trim }}
-                {% endif %}
-
-          - action: "{{ notify_service }}"
-            data:
-              message: command_activity
-              data:
-                intent_action: android.intent.action.VIEW
-                intent_uri: "{{ tapped_uri }}"
-                

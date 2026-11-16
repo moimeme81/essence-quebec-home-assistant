@@ -10,13 +10,22 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig
 
-from .const import DOMAIN, CONF_ADDRESS, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES
 from .api_client import RegieEssenceClient
+from .const import (
+    CONF_ADDRESS,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL_MINUTES,
+    DOMAIN,
+    MAX_SCAN_INTERVAL_MINUTES,
+    MIN_SCAN_INTERVAL_MINUTES,
+)
+from .coordinator import entry_scan_interval
+from .helpers import get_city
 
 _LOGGER = logging.getLogger(__name__)
 
 class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 5
+    VERSION = 6
 
     def __init__(self) -> None:
         self._stations: list[dict[str, Any]] = []
@@ -27,22 +36,28 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._city: str | None = None
         self._brand: str | None = None
 
-    def _get_city(self, address: str) -> str:
-        if not address:
-            return "Inconnu"
-        parts = address.split(",")
-        return parts[-1].strip() if len(parts) > 1 else address.strip()
+    def _get_city(self, address: str | None) -> str:
+        return get_city(address)
+
+    async def _async_load_stations(self) -> bool:
+        """Download the station list once per flow. Returns False on failure."""
+        if self._stations:
+            return True
+        client = RegieEssenceClient(async_get_clientsession(self.hass))
+        try:
+            stations = await client.async_get_all_stations()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Failed to fetch stations: %s", err)
+            return False
+        # Hide stations that are already configured.
+        configured = self._async_current_ids(include_ignore=False)
+        self._stations = [s for s in stations if s.get("Address") and s["Address"] not in configured]
+        return True
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Initial step: Menu to choose Browse or Search."""
-        if not self._stations:
-            session = async_get_clientsession(self.hass)
-            client = RegieEssenceClient(session)
-            try:
-                self._stations = await client.async_get_all_stations()
-            except Exception as err:
-                _LOGGER.error("Failed to fetch stations: %s", err)
-                return self.async_show_form(step_id="user", errors={"base": "cannot_connect"})
+        if not await self._async_load_stations():
+            return self.async_abort(reason="cannot_connect")
 
         return self.async_show_menu(
             step_id="user",
@@ -56,10 +71,8 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Search form with multiple optional fields."""
         errors = {}
         
-        if not self._stations:
-            session = async_get_clientsession(self.hass)
-            client = RegieEssenceClient(session)
-            self._stations = await client.async_get_all_stations()
+        if not await self._async_load_stations():
+            return self.async_abort(reason="cannot_connect")
 
         if user_input is not None:
             region_q = str(user_input.get("search_region") or "").lower().strip()
@@ -154,7 +167,7 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not selected_addresses:
                 errors["base"] = "no_selection"
             else:
-                return self._create_multiple_entries(selected_addresses)
+                return await self._async_create_multiple_entries(selected_addresses)
 
         options = []
         for s in self._search_results:
@@ -177,7 +190,7 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # ==========================================
     # THE MAGIC: BULK ADDING
     # ==========================================
-    def _create_multiple_entries(self, addresses: list[str]):
+    async def _async_create_multiple_entries(self, addresses: list[str]):
         def get_title(addr: str) -> str:
             for s in self._stations:
                 if s.get("Address") == addr:
@@ -197,6 +210,8 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         first_addr = addresses[0]
+        await self.async_set_unique_id(first_addr)
+        self._abort_if_unique_id_configured()
         return self.async_create_entry(
             title=get_title(first_addr),
             data={
@@ -208,6 +223,9 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_import(self, user_input: dict[str, Any]):
+        """Create one of the extra entries started by a multi-select."""
+        await self.async_set_unique_id(user_input[CONF_ADDRESS])
+        self._abort_if_unique_id_configured()
         return self.async_create_entry(
             title=user_input.get("title", "Station Importée"),
             data={
@@ -224,24 +242,24 @@ class RegieEssenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
-        return RegieEssenceOptionsFlow(config_entry)
+        return RegieEssenceOptionsFlow()
+
 
 class RegieEssenceOptionsFlow(config_entries.OptionsFlow):
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self._config_entry = config_entry
+    """Options: polling interval. self.config_entry is provided by Home Assistant."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current_interval = self._config_entry.options.get(
-            CONF_SCAN_INTERVAL, 
-            self._config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
-        )
-        
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Required(CONF_SCAN_INTERVAL, default=current_interval): vol.All(vol.Coerce(int), vol.Range(min=5, max=1440))
-            })
+                vol.Required(
+                    CONF_SCAN_INTERVAL, default=entry_scan_interval(self.config_entry)
+                ): vol.All(
+                    vol.Coerce(int),
+                    vol.Range(min=MIN_SCAN_INTERVAL_MINUTES, max=MAX_SCAN_INTERVAL_MINUTES),
+                )
+            }),
         )

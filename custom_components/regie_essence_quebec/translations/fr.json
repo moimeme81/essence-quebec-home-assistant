@@ -54,7 +54,8 @@
       "no_selection": "Vous devez sélectionner au moins une station."
     },
     "abort": {
-      "already_configured": "Cette station est déjà configurée."
+      "already_configured": "Cette station est déjà configurée.",
+      "cannot_connect": "Échec de la connexion à l'API de la Régie de l'énergie."
     }
   },
   "options": {
@@ -63,6 +64,46 @@
         "title": "Configurer les mises à jour",
         "data": {
           "scan_interval": "Intervalle de mise à jour (minutes)"
+        },
+        "description": "Toutes les stations partagent un seul téléchargement; l'intervalle le plus court parmi vos stations est utilisé (minimum 15 minutes)."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "trend": {
+        "state": {
+          "up": "Hausse",
+          "down": "Baisse",
+          "stable": "Stable"
+        }
+      }
+    }
+  },
+  "services": {
+    "find_closest_stations": {
+      "name": "Trouver les stations proches / moins chères",
+      "description": "Retourne les stations les plus proches et les moins chères dans un rayon donné.",
+      "fields": {
+        "latitude": {
+          "name": "Latitude",
+          "description": "Latitude du point de départ."
+        },
+        "longitude": {
+          "name": "Longitude",
+          "description": "Longitude du point de départ."
+        },
+        "limit": {
+          "name": "Limite",
+          "description": "Nombre de stations retournées par liste."
+        },
+        "radius": {
+          "name": "Rayon de recherche (km)",
+          "description": "Distance maximale des stations."
+        },
+        "gas_type": {
+          "name": "Type d'essence",
+          "description": "Carburant utilisé pour trouver le meilleur prix."
         }
       }
     }
