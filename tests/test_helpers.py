@@ -64,3 +64,48 @@ def test_find_price_item():
     station = default_stations()[0]
     assert find_price_item(station, "diesel")["Price"] == "189.9¢"
     assert find_price_item(None, "diesel") is None
+
+
+def test_bearing():
+    from custom_components.regie_essence_quebec.helpers import bearing_deg
+
+    assert round(bearing_deg(46.0, -71.0, 47.0, -71.0)) == 0  # north
+    assert round(bearing_deg(46.0, -71.0, 46.0, -70.0)) in (89, 90)  # east
+    assert round(bearing_deg(46.0, -71.0, 45.0, -71.0)) == 180  # south
+
+
+def test_stations_ahead_keeps_only_front_corridor():
+    from custom_components.regie_essence_quebec.helpers import stations_ahead
+
+    def st(addr, lat, lon, price):
+        return {
+            "Address": addr, "brand": addr, "latitude": lat, "longitude": lon,
+            "Prices": [{"GasType": "Régulier", "Price": price, "IsAvailable": True}],
+        }
+
+    # Driving east along latitude 46.0 from longitude -72.0.
+    stations = [
+        st("ahead_on_road", 46.0, -71.8, "170.0¢"),      # ~15 km ahead, on the line
+        st("ahead_far_side", 46.10, -71.8, "150.0¢"),    # ~15 km ahead but ~11 km to the side
+        st("ahead_slightly_off", 46.02, -71.7, "165.0¢"),  # ~23 km ahead, ~2.2 km off
+        st("behind", 46.0, -72.2, "140.0¢"),             # behind
+        st("too_far", 46.0, -71.0, "140.0¢"),            # ~77 km ahead
+    ]
+    res = stations_ahead(stations, 46.0, -72.0, 90, 30, 2, "regular")
+    names = {s["Address"]: s for s in res}
+    assert set(names) == {"ahead_on_road", "ahead_slightly_off"}
+    assert 15 < names["ahead_on_road"]["ahead_km"] < 16
+    assert names["ahead_on_road"]["offset_km"] == 0.0
+    assert 2 < names["ahead_slightly_off"]["offset_km"] < 2.5
+    # Detour cost pushes the effective price up a little.
+    s = names["ahead_slightly_off"]
+    assert s["effective_price"] > s["target_price"]
+
+
+def test_exclude_brands():
+    from custom_components.regie_essence_quebec.helpers import exclude_brands
+
+    stations = default_stations()
+    assert len(exclude_brands(stations, ["COSTCO"])) == 2
+    assert len(exclude_brands(stations, [])) == 3
+    assert len(exclude_brands(stations, None)) == 3

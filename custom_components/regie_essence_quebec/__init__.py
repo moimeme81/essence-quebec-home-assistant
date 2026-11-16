@@ -22,7 +22,7 @@ from .const import (
     MAX_SEARCH_RADIUS_KM,
 )
 from .coordinator import RegieEssenceCoordinator
-from .helpers import normalize_fuel, search_stations
+from .helpers import exclude_brands, normalize_fuel, search_stations, stations_ahead
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +42,31 @@ SERVICE_FIND_CLOSEST_SCHEMA = vol.Schema(
             vol.Coerce(float), vol.Range(min=1, max=MAX_SEARCH_RADIUS_KM)
         ),
         vol.Optional("gas_type", default="Régulier"): cv.string,
+        vol.Optional("exclude_brands", default=[]): vol.All(cv.ensure_list, [cv.string]),
+    }
+)
+
+SERVICE_FIND_AHEAD = "find_stations_ahead"
+SERVICE_FIND_AHEAD_SCHEMA = vol.Schema(
+    {
+        vol.Required("latitude"): cv.latitude,
+        vol.Required("longitude"): cv.longitude,
+        vol.Required("heading"): vol.All(vol.Coerce(float), vol.Range(min=0, max=360)),
+        vol.Optional("distance", default=30.0): vol.All(
+            vol.Coerce(float), vol.Range(min=1, max=MAX_SEARCH_RADIUS_KM)
+        ),
+        vol.Optional("max_offset", default=2.0): vol.All(
+            vol.Coerce(float), vol.Range(min=0.2, max=20)
+        ),
+        vol.Optional("limit", default=3): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
+        vol.Optional("gas_type", default="Régulier"): cv.string,
+        vol.Optional("exclude_brands", default=[]): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional("fill_liters", default=40.0): vol.All(
+            vol.Coerce(float), vol.Range(min=5, max=200)
+        ),
+        vol.Optional("consumption", default=9.0): vol.All(
+            vol.Coerce(float), vol.Range(min=2, max=40)
+        ),
     }
 )
 
@@ -107,13 +132,15 @@ def _async_register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_FIND_CLOSEST):
         return
 
-    async def find_closest_stations(call: ServiceCall) -> ServiceResponse:
+    def _fuel(call: ServiceCall) -> str:
         fuel_id = normalize_fuel(call.data["gas_type"])
         if fuel_id is None:
             raise ServiceValidationError(
                 f"Unknown gas type '{call.data['gas_type']}'. Use Régulier, Super or Diesel."
             )
+        return fuel_id
 
+    async def _stations(call: ServiceCall) -> list[dict[str, Any]]:
         coordinator: RegieEssenceCoordinator | None = hass.data.get(DOMAIN, {}).get(DATA_COORDINATOR)
         if coordinator is None:
             raise ServiceValidationError(
@@ -123,10 +150,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
             await coordinator.async_refresh()
         if not coordinator.data:
             raise HomeAssistantError("No station data available from the Régie yet.")
+        return exclude_brands(list(coordinator.data.values()), call.data["exclude_brands"])
 
+    async def find_closest_stations(call: ServiceCall) -> ServiceResponse:
+        fuel_id = _fuel(call)
         limit: int = call.data["limit"]
         valid = search_stations(
-            list(coordinator.data.values()),
+            await _stations(call),
             call.data["latitude"],
             call.data["longitude"],
             call.data["radius"],
@@ -142,6 +172,38 @@ def _async_register_services(hass: HomeAssistant) -> None:
         SERVICE_FIND_CLOSEST,
         find_closest_stations,
         schema=SERVICE_FIND_CLOSEST_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    async def find_stations_ahead(call: ServiceCall) -> ServiceResponse:
+        """Stations in front of you, for use while driving (heading from the phone's GPS)."""
+        fuel_id = _fuel(call)
+        limit: int = call.data["limit"]
+        valid = stations_ahead(
+            await _stations(call),
+            call.data["latitude"],
+            call.data["longitude"],
+            call.data["heading"],
+            call.data["distance"],
+            call.data["max_offset"],
+            fuel_id,
+            call.data["fill_liters"],
+            call.data["consumption"],
+        )
+        by_ahead = sorted(valid, key=lambda s: s["ahead_km"])
+        by_price = sorted(valid, key=lambda s: (s["target_price"], s["ahead_km"]))
+        by_value = sorted(valid, key=lambda s: (s["effective_price"], s["ahead_km"]))
+        return {
+            "next": by_ahead[:limit],
+            "cheapest": by_price[:limit],
+            "best_value": by_value[:limit],
+        }
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_FIND_AHEAD,
+        find_stations_ahead,
+        schema=SERVICE_FIND_AHEAD_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
 

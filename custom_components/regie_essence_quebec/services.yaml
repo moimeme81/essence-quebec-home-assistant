@@ -47,3 +47,106 @@ find_closest_stations:
             - Régulier
             - Super
             - Diesel
+    exclude_brands:
+      name: Exclude brands
+      description: Brands to leave out (e.g. Costco if you are not a member).
+      example: "Costco"
+      selector:
+        text:
+          multiple: true
+
+find_stations_ahead:
+  name: Find stations ahead
+  description: While driving, returns stations in front of you using your GPS position and heading.
+  fields:
+    latitude:
+      name: Latitude
+      description: Current latitude.
+      required: true
+      example: 46.8139
+      selector:
+        number:
+          mode: box
+          step: any
+    longitude:
+      name: Longitude
+      description: Current longitude.
+      required: true
+      example: -71.2080
+      selector:
+        number:
+          mode: box
+          step: any
+    heading:
+      name: Heading
+      description: Direction of travel in degrees (0 = north, 90 = east). The companion app reports it as the "course" attribute.
+      required: true
+      example: 45
+      selector:
+        number:
+          min: 0
+          max: 360
+          unit_of_measurement: "°"
+    distance:
+      name: Distance ahead (km)
+      description: How far ahead to look.
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: km
+    max_offset:
+      name: Max side offset (km)
+      description: How far to the side of your direction a station may be. Grows by 15% of the distance ahead to follow curves.
+      default: 2
+      selector:
+        number:
+          min: 0.2
+          max: 20
+          step: 0.1
+          unit_of_measurement: km
+    limit:
+      name: Limit
+      description: Number of stations to return per list.
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 10
+    gas_type:
+      name: Gas Type
+      description: Which fuel type to search for.
+      default: Régulier
+      selector:
+        select:
+          options:
+            - Régulier
+            - Super
+            - Diesel
+    exclude_brands:
+      name: Exclude brands
+      description: Brands to leave out (e.g. Costco if you are not a member).
+      example: "Costco"
+      selector:
+        text:
+          multiple: true
+    fill_liters:
+      name: Litres to fill
+      description: Used to weigh the detour against the price for the best value list.
+      default: 40
+      selector:
+        number:
+          min: 5
+          max: 200
+          unit_of_measurement: L
+    consumption:
+      name: Fuel consumption (L/100 km)
+      description: Used to estimate what the detour costs.
+      default: 9
+      selector:
+        number:
+          min: 2
+          max: 40
+          step: 0.1
+          unit_of_measurement: L/100 km

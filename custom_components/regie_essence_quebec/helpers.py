@@ -109,3 +109,76 @@ def search_stations(
         result["target_price"] = price
         results.append(result)
     return results
+
+
+def bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Initial compass bearing (0 = north, 90 = east) from point 1 to point 2."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dlon = math.radians(lon2 - lon1)
+    x = math.sin(dlon) * math.cos(phi2)
+    y = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(dlon)
+    return (math.degrees(math.atan2(x, y)) + 360) % 360
+
+
+# How much the allowed side offset grows with distance ahead (15 % of the distance),
+# so stations on a highway that curves away from the straight line are still found.
+AHEAD_WIDENING = 0.15
+
+
+def exclude_brands(stations: list[dict[str, Any]], brands: list[str] | None) -> list[dict[str, Any]]:
+    """Drop stations whose brand contains any of the given words (case-insensitive)."""
+    words = [b.strip().lower() for b in brands or [] if b and b.strip()]
+    if not words:
+        return stations
+    return [
+        s for s in stations if not any(w in str(s.get("brand") or "").lower() for w in words)
+    ]
+
+
+def stations_ahead(
+    stations: list[dict[str, Any]],
+    lat: float,
+    lon: float,
+    heading: float,
+    distance_km: float,
+    max_offset_km: float,
+    fuel_id: str,
+    fill_liters: float = 40.0,
+    consumption_l_100km: float = 9.0,
+) -> list[dict[str, Any]]:
+    """Stations in front of a moving vehicle.
+
+    Each result gets:
+      ahead_km      distance along the direction of travel
+      offset_km     distance to the side of that line
+      detour_km     rough extra driving to reach it and come back (2 x offset, straight line)
+      effective_price  price per litre once the fuel burnt on the detour is counted
+    """
+    candidates = search_stations(
+        stations, lat, lon, distance_km + max_offset_km, fuel_id
+    )
+    results: list[dict[str, Any]] = []
+    for station in candidates:
+        dist = haversine_km(lat, lon, station["latitude"], station["longitude"])
+        angle = math.radians(
+            ((bearing_deg(lat, lon, station["latitude"], station["longitude"]) - heading + 540) % 360)
+            - 180
+        )
+        ahead = dist * math.cos(angle)
+        offset = abs(dist * math.sin(angle))
+        if ahead <= 0 or ahead > distance_km:
+            continue
+        if offset > max_offset_km + ahead * AHEAD_WIDENING:
+            continue
+
+        detour = 2 * offset
+        price = station["target_price"]
+        extra_litres = detour * consumption_l_100km / 100
+        effective = price * (1 + extra_litres / fill_liters) if fill_liters > 0 else price
+
+        station["ahead_km"] = round(ahead, 1)
+        station["offset_km"] = round(offset, 1)
+        station["detour_km"] = round(detour, 1)
+        station["effective_price"] = round(effective, 1)
+        results.append(station)
+    return results

@@ -107,9 +107,31 @@ Ils utilisent la géolocalisation de votre téléphone pour trouver l'essence au
 
 ⚠️ Important : Remplacez `sensor.votre_telephone` et `notify.mobile_app_votre_telephone` par les vraies entités de votre appareil.
 
+### 4. Stations devant moi (pendant la conduite)
+
+Le service `regie_essence_quebec.find_stations_ahead` utilise votre position **et votre direction** (attribut `course` du téléphone, fourni par l'application compagnon) pour ne garder que les stations devant vous. Pratique pendant que Waze ou Google Maps vous guide : aucune application tierce ne peut lire l'itinéraire de Waze, mais votre direction suffit sur l'autoroute.
+
+| Option | Défaut | Description |
+|---|---|---|
+| `latitude` / `longitude` | — | Votre position |
+| `heading` | — | Direction en degrés (0 = nord, 90 = est) |
+| `distance` | 30 | Jusqu'où chercher devant (km) |
+| `max_offset` | 2 | Écart latéral permis (km); s'élargit de 15 % de la distance pour suivre les courbes |
+| `gas_type` | Régulier | Régulier, Super ou Diesel |
+| `exclude_brands` | — | Marques à ignorer (ex: `costco`) |
+| `fill_liters` / `consumption` | 40 / 9 | Pour estimer si un détour vaut la peine |
+
+Le service retourne trois listes : `next` (les prochaines sur la route), `cheapest` (les moins chères) et `best_value` (prix ajusté selon un détour estimé). Chaque station inclut `ahead_km` (distance devant) et `offset_km` (écart sur le côté). Le détour est estimé à vol d'oiseau : sur une route sinueuse, il est surestimé.
+
+**Utilisation dans la voiture :** créez un script avec le blueprint ci-dessous en choisissant un mode « Devant moi », puis ajoutez ce script aux favoris Android Auto de l'application Home Assistant (Paramètres > Companion app > Android Auto). Un toucher sur l'écran de la voiture lance la recherche, et la notification ouvre Waze/Google Maps vers la station choisie.
+
+> 💡 Activez le mode haute précision de l'application compagnon lorsque connecté à la voiture (Bluetooth/Android Auto) pour une position et une direction à jour. À l'arrêt (vitesse < 7 km/h), la direction est inconnue : le script cherche alors autour de vous dans le rayon choisi.
+
+> ⚠️ Ouvrir la navigation vers une station remplace votre trajet en cours dans Waze; relancez votre destination après le plein.
+
 ## Blueprint Notification
 
-Blueprint permettant la notification de votre appareil mobile. Les notifications sont acctionable (max 3) et vous dirige vers la station désiré en utilisant google maps
+Blueprint permettant la notification de votre appareil mobile. Modes : moins chères, plus proches, ou « Devant moi » (meilleure valeur, moins chères, prochaines sur la route). Les notifications sont acctionable (max 3) et vous dirige vers la station désiré en utilisant google maps
 
 [![Import Blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2Fmoimeme81%2Fessence-quebec-home-assistant%2Fmain%2Fblueprint%2Fscript%2Ffind_gas.yaml)
 
@@ -118,6 +140,8 @@ Blueprint permettant la notification de votre appareil mobile. Les notifications
 - [x] Créer des blueprint
 - [x] Ajouter sensor de tendance
 - [ ] Consolider traduction
+- [x] Recherche de stations devant soi pendant la conduite
+- [ ] Recherche le long d'un itinéraire (destination saisie dans Home Assistant)
 - [ ] Automatisation de zone et de proximité
 - [ ] Ajout de possibilités de conversion de devise (utile pour les touriste)
 
