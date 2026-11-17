@@ -172,6 +172,52 @@
           "description": "Rayon de recherche autour de vous si la direction est inconnue."
         }
       }
+    },
+    "find_stations_along_route": {
+      "name": "Trouver les stations sur un trajet",
+      "description": "Trouve les stations le long du trajet routier entre deux endroits (itinéraire OSRM, adresses OpenStreetMap).",
+      "fields": {
+        "origin": {
+          "name": "Départ",
+          "description": "Point de départ : « lat,lon », une entité (zone.home, person.x, device_tracker.telephone), un nom de zone ou une adresse. Par défaut : Maison."
+        },
+        "destination": {
+          "name": "Destination",
+          "description": "Où vous allez : « lat,lon », une entité, un nom de zone (« Travail ») ou une adresse."
+        },
+        "max_offset": {
+          "name": "Distance max du trajet (km)",
+          "description": "Distance maximale entre une station et le trajet."
+        },
+        "start_after_km": {
+          "name": "À partir de (km)",
+          "description": "Ignore les stations du début du trajet (ex: 50 pour faire le plein à mi-chemin)."
+        },
+        "limit": {
+          "name": "Limite",
+          "description": "Nombre de stations retournées par liste."
+        },
+        "gas_type": {
+          "name": "Type d'essence",
+          "description": "Carburant recherché."
+        },
+        "exclude_brands": {
+          "name": "Exclure des marques",
+          "description": "Marques à ignorer (ex: Costco si vous n'êtes pas membre)."
+        },
+        "fill_liters": {
+          "name": "Litres à faire",
+          "description": "Sert à comparer le détour au prix pour la liste « meilleure valeur »."
+        },
+        "consumption": {
+          "name": "Consommation (L/100 km)",
+          "description": "Sert à estimer le coût du détour."
+        },
+        "routing_url": {
+          "name": "Serveur d'itinéraire",
+          "description": "Serveur OSRM à utiliser. Le serveur public par défaut convient à un usage personnel léger; indiquez votre propre OSRM si vous en avez un."
+        }
+      }
     }
   }
 }

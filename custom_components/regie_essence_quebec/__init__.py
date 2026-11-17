@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -11,6 +12,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
@@ -22,7 +24,15 @@ from .const import (
     MAX_SEARCH_RADIUS_KM,
 )
 from .coordinator import RegieEssenceCoordinator
-from .helpers import exclude_brands, normalize_fuel, resolve_heading, search_stations, stations_ahead
+from .helpers import (
+    exclude_brands,
+    normalize_fuel,
+    resolve_heading,
+    search_stations,
+    stations_ahead,
+    stations_along_route,
+)
+from .routing import DEFAULT_OSRM_URL, GeocodingError, RouteClient, RoutingError, parse_latlon
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +41,8 @@ PLATFORMS: list[Platform] = [Platform.SENSOR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 DATA_LOCK = "lock"
+DATA_ROUTE_CLIENT = "route_client"
+ENTITY_ID_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 
 SERVICE_FIND_CLOSEST = "find_closest_stations"
 SERVICE_FIND_CLOSEST_SCHEMA = vol.Schema(
@@ -75,6 +87,25 @@ SERVICE_FIND_AHEAD_SCHEMA = vol.Schema(
         vol.Optional("consumption", default=9.0): vol.All(
             vol.Coerce(float), vol.Range(min=2, max=40)
         ),
+    }
+)
+
+
+SERVICE_FIND_ALONG_ROUTE = "find_stations_along_route"
+SERVICE_FIND_ALONG_ROUTE_SCHEMA = vol.Schema(
+    {
+        # Each accepts: "lat,lon", an entity (zone./person./device_tracker.), a zone name
+        # ("Travail"), or an address ("1 rue Principale, Sherbrooke").
+        vol.Optional("origin", default="zone.home"): cv.string,
+        vol.Required("destination"): cv.string,
+        vol.Optional("max_offset", default=2.0): vol.All(vol.Coerce(float), vol.Range(min=0.2, max=20)),
+        vol.Optional("limit", default=5): vol.All(vol.Coerce(int), vol.Range(min=1, max=20)),
+        vol.Optional("gas_type", default="Régulier"): cv.string,
+        vol.Optional("exclude_brands", default=[]): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional("fill_liters", default=40.0): vol.All(vol.Coerce(float), vol.Range(min=5, max=200)),
+        vol.Optional("consumption", default=9.0): vol.All(vol.Coerce(float), vol.Range(min=2, max=40)),
+        vol.Optional("start_after_km", default=0.0): vol.All(vol.Coerce(float), vol.Range(min=0)),
+        vol.Optional("routing_url", default=DEFAULT_OSRM_URL): cv.url,
     }
 )
 
@@ -239,6 +270,54 @@ def _async_register_services(hass: HomeAssistant) -> None:
             "best_value": by_value[:limit],
         }
 
+    async def find_stations_along_route(call: ServiceCall) -> ServiceResponse:
+        """Stations along the driving route between two places."""
+        fuel_id = _fuel(call)
+        limit: int = call.data["limit"]
+        origin = await _async_resolve_place(hass, call.data["origin"])
+        destination = await _async_resolve_place(hass, call.data["destination"])
+
+        try:
+            route = await _route_client(hass).async_route(
+                (origin["latitude"], origin["longitude"]),
+                (destination["latitude"], destination["longitude"]),
+                call.data["routing_url"],
+            )
+        except RoutingError as err:
+            raise HomeAssistantError(str(err)) from err
+
+        stations = await _stations(call)
+        valid = await hass.async_add_executor_job(
+            stations_along_route,
+            stations,
+            route["points"],
+            call.data["max_offset"],
+            fuel_id,
+            call.data["fill_liters"],
+            call.data["consumption"],
+        )
+        valid = [s for s in valid if s["route_km"] >= call.data["start_after_km"]]
+        by_route = sorted(valid, key=lambda s: s["route_km"])
+        by_price = sorted(valid, key=lambda s: (s["target_price"], s["route_km"]))
+        by_value = sorted(valid, key=lambda s: (s["effective_price"], s["route_km"]))
+        return {
+            "origin": origin,
+            "destination": destination,
+            "route": {"distance_km": route["distance_km"], "duration_min": route["duration_min"]},
+            "count": len(valid),
+            "along": by_route[:limit],
+            "cheapest": by_price[:limit],
+            "best_value": by_value[:limit],
+        }
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_FIND_ALONG_ROUTE,
+        find_stations_along_route,
+        schema=SERVICE_FIND_ALONG_ROUTE_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_FIND_AHEAD,
@@ -246,6 +325,65 @@ def _async_register_services(hass: HomeAssistant) -> None:
         schema=SERVICE_FIND_AHEAD_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
+
+
+def _route_client(hass: HomeAssistant) -> RouteClient:
+    data = _domain_data(hass)
+    if DATA_ROUTE_CLIENT not in data:
+        data[DATA_ROUTE_CLIENT] = RouteClient(async_get_clientsession(hass))
+    return data[DATA_ROUTE_CLIENT]
+
+
+async def _async_resolve_place(hass: HomeAssistant, value: str) -> dict[str, Any]:
+    """Turn coordinates / an entity / a zone name / an address into a location."""
+    text = value.strip()
+    if not text:
+        raise ServiceValidationError("Empty origin or destination.")
+
+    if (coords := parse_latlon(text)) is not None:
+        return {"latitude": coords[0], "longitude": coords[1], "label": text, "source": "coordinates"}
+
+    def _from_state(state) -> dict[str, Any] | None:
+        lat, lon = state.attributes.get("latitude"), state.attributes.get("longitude")
+        if lat is None or lon is None:
+            return None
+        return {
+            "latitude": float(lat),
+            "longitude": float(lon),
+            "label": state.name,
+            "source": "entity",
+        }
+
+    if ENTITY_ID_RE.match(text.lower()):
+        state = hass.states.get(text.lower())
+        if state is not None:
+            if (place := _from_state(state)) is None:
+                raise ServiceValidationError(f"{text} has no location.")
+            return place
+        if text.lower() != "zone.home":
+            raise ServiceValidationError(f"Entity not found: {text}")
+
+    if text.lower() in {"zone.home", "home", "maison", "domicile"} and not hass.states.get("zone.home"):
+        return {
+            "latitude": hass.config.latitude,
+            "longitude": hass.config.longitude,
+            "label": hass.config.location_name or "Home",
+            "source": "home",
+        }
+
+    lowered = text.lower()
+    for state in hass.states.async_all("zone"):
+        names = {state.name.lower(), state.entity_id.split(".", 1)[1].replace("_", " ")}
+        if state.entity_id == "zone.home":
+            names |= {"home", "maison", "domicile"}
+        if lowered in names and (place := _from_state(state)) is not None:
+            return {**place, "source": "zone"}
+
+    try:
+        place = await _route_client(hass).async_geocode(text)
+    except GeocodingError as err:
+        raise ServiceValidationError(str(err)) from err
+    return {**place, "source": "address"}
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:

@@ -181,3 +181,91 @@ find_stations_ahead:
           max: 40
           step: 0.1
           unit_of_measurement: L/100 km
+
+find_stations_along_route:
+  name: Find stations along a route
+  description: Finds stations along the driving route between two places (route from OSRM, addresses from OpenStreetMap).
+  fields:
+    origin:
+      name: Origin
+      description: 'Where you start: "lat,lon", an entity (zone.home, person.x, device_tracker.phone), a zone name, or an address. Defaults to Home.'
+      default: zone.home
+      example: device_tracker.phone
+      selector:
+        text:
+    destination:
+      name: Destination
+      description: 'Where you are going: "lat,lon", an entity, a zone name ("Travail"), or an address.'
+      required: true
+      example: "2500 boul. de l'Université, Sherbrooke"
+      selector:
+        text:
+    max_offset:
+      name: Max distance from route (km)
+      description: How far from the route a station may be.
+      default: 2
+      selector:
+        number:
+          min: 0.2
+          max: 20
+          step: 0.1
+          unit_of_measurement: km
+    start_after_km:
+      name: Start after (km)
+      description: Ignore stations in the first part of the trip (e.g. 50 to fill up halfway).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 1000
+          unit_of_measurement: km
+    limit:
+      name: Limit
+      description: Number of stations to return per list.
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 20
+    gas_type:
+      name: Gas Type
+      description: Which fuel type to search for.
+      default: Régulier
+      selector:
+        select:
+          options:
+            - Régulier
+            - Super
+            - Diesel
+    exclude_brands:
+      name: Exclude brands
+      description: Brands to leave out (e.g. Costco if you are not a member).
+      example: "Costco"
+      selector:
+        text:
+          multiple: true
+    fill_liters:
+      name: Litres to fill
+      description: Used to weigh the detour against the price for the best value list.
+      default: 40
+      selector:
+        number:
+          min: 5
+          max: 200
+          unit_of_measurement: L
+    consumption:
+      name: Fuel consumption (L/100 km)
+      description: Used to estimate what the detour costs.
+      default: 9
+      selector:
+        number:
+          min: 2
+          max: 40
+          step: 0.1
+          unit_of_measurement: L/100 km
+    routing_url:
+      name: Routing server
+      description: OSRM server to use. The default public server is for light personal use; point this to your own OSRM if you have one.
+      default: https://router.project-osrm.org
+      selector:
+        text:
