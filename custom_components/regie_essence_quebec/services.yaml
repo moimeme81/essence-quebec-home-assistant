@@ -79,14 +79,45 @@ find_stations_ahead:
           step: any
     heading:
       name: Heading
-      description: Direction of travel in degrees (0 = north, 90 = east). The companion app reports it as the "course" attribute.
-      required: true
+      description: Direction of travel in degrees (0 = north, 90 = east), the companion app's "course" attribute. Optional; ignored when speed says you are stopped.
       example: 45
       selector:
         number:
           min: 0
           max: 360
           unit_of_measurement: "°"
+    speed:
+      name: Speed (m/s)
+      description: The companion app's "speed" attribute. Below 2 m/s (~7 km/h) the heading is ignored.
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: any
+          unit_of_measurement: m/s
+    from_latitude:
+      name: Previous latitude
+      description: Where you were a moment ago. Used to work out the direction when no usable heading is given.
+      selector:
+        number:
+          mode: box
+          step: any
+    from_longitude:
+      name: Previous longitude
+      description: Where you were a moment ago.
+      selector:
+        number:
+          mode: box
+          step: any
+    fallback_radius:
+      name: Fallback radius (km)
+      description: Radius searched around you when no direction can be determined.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: km
     distance:
       name: Distance ahead (km)
       description: How far ahead to look.

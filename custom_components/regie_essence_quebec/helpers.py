@@ -182,3 +182,42 @@ def stations_ahead(
         station["effective_price"] = round(effective, 1)
         results.append(station)
     return results
+
+
+# Below this speed (m/s, ~7 km/h) a GPS course is noise.
+MIN_MOVING_SPEED = 2.0
+# Minimum displacement between two fixes to trust the bearing between them.
+MIN_MOVEMENT_KM = 0.2
+
+
+def resolve_heading(
+    lat: float,
+    lon: float,
+    course: float | None,
+    speed: float | None,
+    from_lat: float | None = None,
+    from_lon: float | None = None,
+) -> tuple[float | None, str | None, str | None]:
+    """Pick the direction of travel.
+
+    Returns (heading, source, reason): source is "gps" or "movement"; when no
+    heading can be trusted, heading/source are None and reason says why
+    ("stopped" or "no_heading").
+    """
+    moving = speed is None or speed >= MIN_MOVING_SPEED
+    # Android reports course 0 when it has no bearing, so 0 is only trusted with a real speed.
+    gps_ok = course is not None and moving and (course != 0 or (speed or 0) >= MIN_MOVING_SPEED)
+
+    if gps_ok and course != 0:
+        return float(course) % 360, "gps", None
+
+    if from_lat is not None and from_lon is not None:
+        if haversine_km(from_lat, from_lon, lat, lon) >= MIN_MOVEMENT_KM:
+            return bearing_deg(from_lat, from_lon, lat, lon), "movement", None
+
+    if gps_ok:  # course exactly 0 while clearly moving: driving due north
+        return 0.0, "gps", None
+
+    if speed is not None and speed < MIN_MOVING_SPEED:
+        return None, None, "stopped"
+    return None, None, "no_heading"

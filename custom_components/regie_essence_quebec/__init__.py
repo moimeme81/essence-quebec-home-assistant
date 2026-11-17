@@ -22,7 +22,7 @@ from .const import (
     MAX_SEARCH_RADIUS_KM,
 )
 from .coordinator import RegieEssenceCoordinator
-from .helpers import exclude_brands, normalize_fuel, search_stations, stations_ahead
+from .helpers import exclude_brands, normalize_fuel, resolve_heading, search_stations, stations_ahead
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +51,15 @@ SERVICE_FIND_AHEAD_SCHEMA = vol.Schema(
     {
         vol.Required("latitude"): cv.latitude,
         vol.Required("longitude"): cv.longitude,
-        vol.Required("heading"): vol.All(vol.Coerce(float), vol.Range(min=0, max=360)),
+        # GPS course from the phone. Optional: without it (or when stopped) the direction is
+        # worked out from from_latitude/from_longitude, else a radius search is done.
+        vol.Optional("heading"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0, max=360))),
+        vol.Optional("speed"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(min=0))),
+        vol.Optional("from_latitude"): vol.Any(None, cv.latitude),
+        vol.Optional("from_longitude"): vol.Any(None, cv.longitude),
+        vol.Optional("fallback_radius", default=10.0): vol.All(
+            vol.Coerce(float), vol.Range(min=1, max=MAX_SEARCH_RADIUS_KM)
+        ),
         vol.Optional("distance", default=30.0): vol.All(
             vol.Coerce(float), vol.Range(min=1, max=MAX_SEARCH_RADIUS_KM)
         ),
@@ -179,11 +187,42 @@ def _async_register_services(hass: HomeAssistant) -> None:
         """Stations in front of you, for use while driving (heading from the phone's GPS)."""
         fuel_id = _fuel(call)
         limit: int = call.data["limit"]
+        lat, lon = call.data["latitude"], call.data["longitude"]
+        speed = call.data.get("speed")
+        heading, source, reason = resolve_heading(
+            lat,
+            lon,
+            call.data.get("heading"),
+            speed,
+            call.data.get("from_latitude"),
+            call.data.get("from_longitude"),
+        )
+        info: dict[str, Any] = {
+            "direction_known": heading is not None,
+            "heading": round(heading) if heading is not None else None,
+            "heading_source": source,
+            "reason": reason,
+            "speed_kmh": round(speed * 3.6) if speed is not None else None,
+        }
+        stations = await _stations(call)
+
+        if heading is None:
+            # No usable direction: plain radius search so the driver still gets an answer.
+            valid = search_stations(stations, lat, lon, call.data["fallback_radius"], fuel_id)
+            by_distance = sorted(valid, key=lambda s: s["distance_km"])
+            by_price = sorted(valid, key=lambda s: (s["target_price"], s["distance_km"]))
+            return {
+                **info,
+                "next": by_distance[:limit],
+                "cheapest": by_price[:limit],
+                "best_value": by_price[:limit],
+            }
+
         valid = stations_ahead(
-            await _stations(call),
-            call.data["latitude"],
-            call.data["longitude"],
-            call.data["heading"],
+            stations,
+            lat,
+            lon,
+            heading,
             call.data["distance"],
             call.data["max_offset"],
             fuel_id,
@@ -194,6 +233,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         by_price = sorted(valid, key=lambda s: (s["target_price"], s["ahead_km"]))
         by_value = sorted(valid, key=lambda s: (s["effective_price"], s["ahead_km"]))
         return {
+            **info,
             "next": by_ahead[:limit],
             "cheapest": by_price[:limit],
             "best_value": by_value[:limit],

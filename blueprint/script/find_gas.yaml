@@ -84,6 +84,12 @@ blueprint:
           step: 0.5
           unit_of_measurement: km
           mode: slider
+    refresh_location:
+      name: Demander une position à jour
+      description: "Demande au téléphone une nouvelle position GPS juste avant la recherche (attend jusqu'à 15 s). Fortement recommandé pour les modes « Devant moi » : sinon la position et la direction peuvent dater de plusieurs minutes."
+      default: true
+      selector:
+        boolean: {}
     limit:
       name: Nombre de résultats
       default: 3
@@ -135,58 +141,90 @@ sequence:
       gas_type: !input gas_type
       ahead_distance: !input ahead_distance
       max_offset: !input max_offset
+      refresh_location: !input refresh_location
       raw_phone_entity: !input notify_phone
       notify_service: "{{ raw_phone_entity | replace('device_tracker.', 'notify.mobile_app_') }}"
-      lat: "{{ state_attr(location_entity, 'latitude') | float(0) }}"
-      # A person has no heading: read it from the device tracker the person is currently using.
-      motion_entity: >
-        {% if location_entity.startswith('person.') and state_attr(location_entity, 'source') %}
-          {{ state_attr(location_entity, 'source') }}
-        {% else %}
-          {{ location_entity }}
-        {% endif %}
-      course: "{{ state_attr(motion_entity | trim, 'course') }}"
-      speed: "{{ state_attr(motion_entity | trim, 'speed') }}"
-      # Direction is only meaningful while moving (speed in m/s; > ~7 km/h).
-      heading_known: >
-        {{ course is number and 0 <= course <= 360
-           and (speed is not number or speed >= 2) }}
-      is_ahead: "{{ search_mode.startswith('ahead') and heading_known }}"
-      ahead_fallback: "{{ search_mode.startswith('ahead') and not heading_known }}"
+      ahead_mode: "{{ search_mode.startswith('ahead') }}"
+      # A person has no speed/heading: use the device tracker the person is currently using.
+      motion_entity: "{{ state_attr(location_entity, 'source') if location_entity.startswith('person.') and state_attr(location_entity, 'source') else location_entity }}"
+      # Remember the current fix: comparing it with the fresh one gives the direction of travel
+      # even when the phone does not report a GPS course.
+      prev_lat: "{{ state_attr(motion_entity, 'latitude') }}"
+      prev_lon: "{{ state_attr(motion_entity, 'longitude') }}"
+      prev_ts: "{{ as_timestamp(states[motion_entity].last_updated, 0) if states[motion_entity] is not none else 0 }}"
       # Unique action ids per run, so a tap on an older notification (or another phone) is ignored.
       action_nav_1: "{{ 'NAV_STATION_1_' ~ context.id }}"
       action_nav_2: "{{ 'NAV_STATION_2_' ~ context.id }}"
       action_nav_3: "{{ 'NAV_STATION_3_' ~ context.id }}"
-      lon: "{{ state_attr(location_entity, 'longitude') | float(0) }}"
+
+  # Ask the phone for a fresh GPS fix: in the background the companion app may only report every few minutes.
+  - if:
+      - condition: template
+        value_template: "{{ refresh_location and motion_entity.startswith('device_tracker.') }}"
+    then:
+      - action: "{{ notify_service }}"
+        continue_on_error: true
+        data:
+          message: request_location_update
+      - wait_template: "{{ as_timestamp(states[motion_entity].last_updated, 0) > prev_ts | float(0) }}"
+        timeout: "00:00:15"
+        continue_on_timeout: true
+
+  - variables:
+      lat: "{{ state_attr(motion_entity if ahead_mode else location_entity, 'latitude') | float(0) }}"
+      lon: "{{ state_attr(motion_entity if ahead_mode else location_entity, 'longitude') | float(0) }}"
+      course: "{{ state_attr(motion_entity, 'course') }}"
+      speed: "{{ state_attr(motion_entity, 'speed') }}"
+      fresh_ts: "{{ as_timestamp(states[motion_entity].last_updated, 0) if states[motion_entity] is not none else 0 }}"
+      # Only compare with the previous fix if we got a new one and the old one is recent (< 15 min).
+      use_prev: >
+        {{ prev_lat is number and prev_lon is number
+           and fresh_ts | float(0) > prev_ts | float(0)
+           and fresh_ts | float(0) - prev_ts | float(0) < 900 }}
 
   - condition: template
     value_template: "{{ lat != 0 and lon != 0 }}"
 
   - action: >
-      {{ 'regie_essence_quebec.find_stations_ahead' if is_ahead
+      {{ 'regie_essence_quebec.find_stations_ahead' if ahead_mode
          else 'regie_essence_quebec.find_closest_stations' }}
     data: >
       {% set common = {
         'latitude': lat, 'longitude': lon, 'gas_type': gas_type,
         'limit': limit_val | int, 'exclude_brands': [] if has_costco else ['costco']
       } %}
-      {% if is_ahead %}
-        {{ dict(common, heading=course, distance=ahead_distance, max_offset=max_offset) }}
+      {% if ahead_mode %}
+        {% set ahead = {'distance': ahead_distance, 'max_offset': max_offset, 'fallback_radius': radius_km} %}
+        {% if course is number %}{% set ahead = dict(ahead, heading=course) %}{% endif %}
+        {% if speed is number %}{% set ahead = dict(ahead, speed=speed) %}{% endif %}
+        {% if use_prev %}{% set ahead = dict(ahead, from_latitude=prev_lat, from_longitude=prev_lon) %}{% endif %}
+        {{ dict(common, **ahead) }}
       {% else %}
         {{ dict(common, radius=radius_km) }}
       {% endif %}
     response_variable: gas_results
 
   - variables:
+      is_ahead: "{{ ahead_mode and gas_results.direction_known }}"
+      ahead_fallback: "{{ ahead_mode and not gas_results.direction_known }}"
       stations: >
-        {% if is_ahead %}
+        {% if ahead_mode %}
           {% set key = {'ahead_best': 'best_value', 'ahead_cheapest': 'cheapest'}.get(search_mode, 'next') %}
-        {% elif search_mode in ['closest', 'ahead_next'] %}
+        {% elif search_mode == 'closest' %}
           {% set key = 'closest' %}
         {% else %}
           {% set key = 'cheapest' %}
         {% endif %}
         {{ gas_results[key] }}
+      # One line telling the driver which direction was used (or why none was).
+      direction_line: >
+        {% if is_ahead %}
+          {% set h = gas_results.heading | int %}
+          {% set names = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'] %}
+          🧭 {{ names[((h + 22.5) // 45) | int % 8] }} ({{ h }}°){% if gas_results.speed_kmh is number %} · {{ gas_results.speed_kmh }} km/h{% endif %}{% if gas_results.heading_source == 'movement' %} · selon votre déplacement{% endif %}
+        {% elif ahead_fallback %}
+          🧭 Direction inconnue ({{ 'à l’arrêt' if gas_results.reason == 'stopped' else 'aucun cap GPS reçu' }}) : recherche dans un rayon de {{ radius_km }} km
+        {% endif %}
       # Distance shown on each line / button: along the road ahead, or straight-line around you.
       km_list: >
         {{ stations | map(attribute='ahead_km' if is_ahead else 'distance_km') | list }}
@@ -201,6 +239,8 @@ sequence:
           Stations les moins chères
         {% endif %}
       gas_message: >
+        {% if direction_line | trim %}{{ direction_line | trim }}
+        {% endif %}
         {% if stations | length == 0 %}
           {% if is_ahead %}Aucune station trouvée dans les {{ ahead_distance }} km devant vous.
           {% else %}Aucune station trouvée dans un rayon de {{ radius_km }} km.{% endif %}

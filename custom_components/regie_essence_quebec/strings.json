@@ -125,7 +125,7 @@
         },
         "heading": {
           "name": "Heading",
-          "description": "Direction of travel in degrees (0 = north, 90 = east). The companion app reports it as the \"course\" attribute."
+          "description": "Direction of travel in degrees (0 = north, 90 = east), the companion app's \"course\" attribute. Optional; ignored when speed says you are stopped."
         },
         "distance": {
           "name": "Distance ahead (km)",
@@ -154,6 +154,22 @@
         "consumption": {
           "name": "Fuel consumption (L/100 km)",
           "description": "Used to estimate what the detour costs."
+        },
+        "speed": {
+          "name": "Speed (m/s)",
+          "description": "The companion app's \"speed\" attribute. Below 2 m/s (~7 km/h) the heading is ignored."
+        },
+        "from_latitude": {
+          "name": "Previous latitude",
+          "description": "Where you were a moment ago. Used to work out the direction when no usable heading is given."
+        },
+        "from_longitude": {
+          "name": "Previous longitude",
+          "description": "Where you were a moment ago."
+        },
+        "fallback_radius": {
+          "name": "Fallback radius (km)",
+          "description": "Radius searched around you when no direction can be determined."
         }
       }
     }

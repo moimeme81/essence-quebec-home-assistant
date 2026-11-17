@@ -179,6 +179,27 @@ async def test_find_stations_ahead_service(hass: HomeAssistant, feed) -> None:
     assert result["best_value"][0]["Address"] == ADDR_B
     assert result["next"][0]["ahead_km"] > 10
 
+    assert result["direction_known"] is True
+    assert result["heading"] == 90 and result["heading_source"] == "gps"
+
+    # Stopped: falls back to a radius search and says why.
+    result = await hass.services.async_call(
+        DOMAIN, "find_stations_ahead",
+        {**WEST_OF_QUEBEC, "heading": 90, "speed": 0, "fallback_radius": 30},
+        blocking=True, return_response=True,
+    )
+    assert result["direction_known"] is False and result["reason"] == "stopped"
+    assert {s["Address"] for s in result["next"]} == {ADDR_A, ADDR_B}
+
+    # No course at all, but we know where we were a minute ago (further west): heading east.
+    result = await hass.services.async_call(
+        DOMAIN, "find_stations_ahead",
+        {**WEST_OF_QUEBEC, "from_latitude": 46.80, "from_longitude": -71.45},
+        blocking=True, return_response=True,
+    )
+    assert result["heading_source"] == "movement" and 85 <= result["heading"] <= 95
+    assert [s["Address"] for s in result["next"]] == [ADDR_B, ADDR_A]
+
     # Heading west: everything is behind us.
     result = await hass.services.async_call(
         DOMAIN, "find_stations_ahead", {**WEST_OF_QUEBEC, "heading": 270},

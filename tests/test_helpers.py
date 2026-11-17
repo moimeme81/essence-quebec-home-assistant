@@ -109,3 +109,19 @@ def test_exclude_brands():
     assert len(exclude_brands(stations, ["COSTCO"])) == 2
     assert len(exclude_brands(stations, [])) == 3
     assert len(exclude_brands(stations, None)) == 3
+
+
+def test_resolve_heading():
+    from custom_components.regie_essence_quebec.helpers import resolve_heading
+
+    # Good GPS course while moving.
+    assert resolve_heading(46.0, -71.0, 45, 20) == (45.0, "gps", None)
+    # Stopped: course is meaningless.
+    assert resolve_heading(46.0, -71.0, 45, 0.5) == (None, None, "stopped")
+    # Android's "course 0, speed 0" (no bearing) falls back to movement when available.
+    h, src, _ = resolve_heading(46.0, -71.0, 0, 0, 46.0, -71.02)
+    assert src == "movement" and 85 < h < 95
+    # Moved too little to trust the movement.
+    assert resolve_heading(46.0, -71.0, None, None, 46.0, -71.0005)[2] == "no_heading"
+    # Course 0 with real speed = due north.
+    assert resolve_heading(46.0, -71.0, 0, 25) == (0.0, "gps", None)
