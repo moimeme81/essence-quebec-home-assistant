@@ -114,16 +114,21 @@ Le service `regie_essence_quebec.find_stations_ahead` utilise votre position **e
 | Option | Défaut | Description |
 |---|---|---|
 | `latitude` / `longitude` | — | Votre position |
-| `heading` | — | Direction en degrés (0 = nord, 90 = est) |
+| `heading` | — | Direction en degrés (0 = nord, 90 = est), attribut `course` du téléphone. Optionnelle |
+| `speed` | — | Vitesse en m/s (attribut `speed`); sous ~7 km/h la direction est ignorée |
+| `from_latitude` / `from_longitude` | — | Position précédente : permet de déduire la direction si le téléphone n'envoie pas de cap |
+| `fallback_radius` | 10 | Rayon de recherche si la direction est inconnue |
 | `distance` | 30 | Jusqu'où chercher devant (km) |
 | `max_offset` | 2 | Écart latéral permis (km); s'élargit de 15 % de la distance pour suivre les courbes |
 | `gas_type` | Régulier | Régulier, Super ou Diesel |
 | `exclude_brands` | — | Marques à ignorer (ex: `costco`) |
 | `fill_liters` / `consumption` | 40 / 9 | Pour estimer si un détour vaut la peine |
 
-Le service retourne trois listes : `next` (les prochaines sur la route), `cheapest` (les moins chères) et `best_value` (prix ajusté selon un détour estimé). Chaque station inclut `ahead_km` (distance devant) et `offset_km` (écart sur le côté). Le détour est estimé à vol d'oiseau : sur une route sinueuse, il est surestimé.
+Le service indique aussi la direction utilisée (`direction_known`, `heading`, `heading_source` = `gps` ou `movement`, `reason` = `stopped` ou `no_heading`). Il retourne trois listes : `next` (les prochaines sur la route), `cheapest` (les moins chères) et `best_value` (prix ajusté selon un détour estimé). Chaque station inclut `ahead_km` (distance devant) et `offset_km` (écart sur le côté). Le détour est estimé à vol d'oiseau : sur une route sinueuse, il est surestimé.
 
 **Utilisation dans la voiture :** créez un script avec le blueprint ci-dessous en choisissant un mode « Devant moi », puis ajoutez ce script aux favoris Android Auto de l'application Home Assistant (Paramètres > Companion app > Android Auto). Un toucher sur l'écran de la voiture lance la recherche, et la notification ouvre Waze/Google Maps vers la station choisie.
+
+> 🧭 La direction vient du GPS (sens du déplacement), pas de la boussole : la position du téléphone dans la voiture n'a aucune importance. Par défaut, le script demande une position à jour au téléphone avant de chercher (jusqu'à 15 s d'attente) et, si le téléphone n'envoie pas de cap, il compare l'ancienne et la nouvelle position pour déduire la direction. La notification affiche la direction utilisée (ex: « 🧭 NE (45°) · 95 km/h »).
 
 > 💡 Activez le mode haute précision de l'application compagnon lorsque connecté à la voiture (Bluetooth/Android Auto) pour une position et une direction à jour. À l'arrêt (vitesse < 7 km/h), la direction est inconnue : le script cherche alors autour de vous dans le rayon choisi.
 

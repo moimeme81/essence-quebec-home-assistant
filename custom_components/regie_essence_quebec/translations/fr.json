@@ -125,7 +125,7 @@
         },
         "heading": {
           "name": "Direction",
-          "description": "Direction en degrés (0 = nord, 90 = est). L'application compagnon la fournit dans l'attribut « course »."
+          "description": "Direction en degrés (0 = nord, 90 = est), l'attribut « course » de l'application compagnon. Optionnelle; ignorée si la vitesse indique que vous êtes à l'arrêt."
         },
         "distance": {
           "name": "Distance devant (km)",
@@ -154,6 +154,22 @@
         "consumption": {
           "name": "Consommation (L/100 km)",
           "description": "Sert à estimer le coût du détour."
+        },
+        "speed": {
+          "name": "Vitesse (m/s)",
+          "description": "L'attribut « speed » de l'application compagnon. Sous 2 m/s (~7 km/h), la direction est ignorée."
+        },
+        "from_latitude": {
+          "name": "Latitude précédente",
+          "description": "Votre position il y a un moment. Sert à déduire la direction si aucun cap utilisable n'est fourni."
+        },
+        "from_longitude": {
+          "name": "Longitude précédente",
+          "description": "Votre position il y a un moment."
+        },
+        "fallback_radius": {
+          "name": "Rayon de repli (km)",
+          "description": "Rayon de recherche autour de vous si la direction est inconnue."
         }
       }
     }
