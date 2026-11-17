@@ -134,6 +134,33 @@ Le service indique aussi la direction utilisée (`direction_known`, `heading`, `
 
 > ⚠️ Ouvrir la navigation vers une station remplace votre trajet en cours dans Waze; relancez votre destination après le plein.
 
+### 5. Stations sur un trajet (destination choisie dans Home Assistant)
+
+Le service `regie_essence_quebec.find_stations_along_route` calcule le vrai trajet routier entre deux endroits et retourne les stations le long de la route. Testez-le dans **Outils de développement > Actions** :
+
+```yaml
+action: regie_essence_quebec.find_stations_along_route
+data:
+  origin: device_tracker.votre_telephone   # défaut : zone.home
+  destination: "2500 boul. de l'Université, Sherbrooke"
+  gas_type: Régulier
+  max_offset: 2          # km maximum entre la station et la route
+  start_after_km: 50     # optionnel : ignorer le début du trajet
+  exclude_brands: [costco]
+```
+
+`origin` et `destination` acceptent :
+- des coordonnées : `"46.81,-71.21"`
+- une entité avec position : `zone.travail`, `person.moi`, `device_tracker.telephone`
+- le nom d'une zone : `Travail`, `Maison`
+- une adresse : `"1 rue Principale, Sherbrooke"` (recherchée avec OpenStreetMap, limitée au Canada)
+
+La réponse contient le départ et la destination trouvés, la distance et la durée du trajet, et trois listes : `along` (dans l'ordre du trajet), `cheapest` et `best_value`. Chaque station inclut `route_km` (où elle se trouve sur le trajet) et `offset_km` (distance de la route).
+
+> ℹ️ L'itinéraire vient du serveur public [OSRM](https://project-osrm.org/) et les adresses de [Nominatim](https://nominatim.org/) (OpenStreetMap). Ils conviennent à un usage personnel; pour un usage intensif, indiquez votre propre serveur OSRM avec `routing_url`.
+
+Ce service servira de base à l'application Android Auto (à venir).
+
 ## Blueprint Notification
 
 Blueprint permettant la notification de votre appareil mobile. Modes : moins chères, plus proches, ou « Devant moi » (meilleure valeur, moins chères, prochaines sur la route). Les notifications sont acctionable (max 3) et vous dirige vers la station désiré en utilisant google maps
@@ -146,7 +173,8 @@ Blueprint permettant la notification de votre appareil mobile. Modes : moins ch�
 - [x] Ajouter sensor de tendance
 - [ ] Consolider traduction
 - [x] Recherche de stations devant soi pendant la conduite
-- [ ] Recherche le long d'un itinéraire (destination saisie dans Home Assistant)
+- [x] Recherche le long d'un itinéraire (destination saisie dans Home Assistant)
+- [ ] Application Android Auto
 - [ ] Automatisation de zone et de proximité
 - [ ] Ajout de possibilités de conversion de devise (utile pour les touriste)
 

@@ -172,6 +172,52 @@
           "description": "Radius searched around you when no direction can be determined."
         }
       }
+    },
+    "find_stations_along_route": {
+      "name": "Find stations along a route",
+      "description": "Finds stations along the driving route between two places (route from OSRM, addresses from OpenStreetMap).",
+      "fields": {
+        "origin": {
+          "name": "Origin",
+          "description": "Where you start: \"lat,lon\", an entity (zone.home, person.x, device_tracker.phone), a zone name, or an address. Defaults to Home."
+        },
+        "destination": {
+          "name": "Destination",
+          "description": "Where you are going: \"lat,lon\", an entity, a zone name (\"Travail\"), or an address."
+        },
+        "max_offset": {
+          "name": "Max distance from route (km)",
+          "description": "How far from the route a station may be."
+        },
+        "start_after_km": {
+          "name": "Start after (km)",
+          "description": "Ignore stations in the first part of the trip (e.g. 50 to fill up halfway)."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "Number of stations to return per list."
+        },
+        "gas_type": {
+          "name": "Gas type",
+          "description": "Which fuel type to search for."
+        },
+        "exclude_brands": {
+          "name": "Exclude brands",
+          "description": "Brands to leave out (e.g. Costco if you are not a member)."
+        },
+        "fill_liters": {
+          "name": "Litres to fill",
+          "description": "Used to weigh the detour against the price for the best value list."
+        },
+        "consumption": {
+          "name": "Fuel consumption (L/100 km)",
+          "description": "Used to estimate what the detour costs."
+        },
+        "routing_url": {
+          "name": "Routing server",
+          "description": "OSRM server to use. The default public server is for light personal use; point this to your own OSRM if you have one."
+        }
+      }
     }
   }
 }

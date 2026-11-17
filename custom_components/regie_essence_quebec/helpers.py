@@ -221,3 +221,130 @@ def resolve_heading(
     if speed is not None and speed < MIN_MOVING_SPEED:
         return None, None, "stopped"
     return None, None, "no_heading"
+
+
+# ----------------------------------------------------------------------
+# Along a route
+# ----------------------------------------------------------------------
+KM_PER_DEG_LAT = 110.574
+KM_PER_DEG_LON_EQUATOR = 111.320
+
+
+def simplify_route(points: list[tuple[float, float]], min_step_km: float = 0.1) -> list[tuple[float, float]]:
+    """Drop route points closer than min_step_km to the previous kept one (keeps the last point)."""
+    if len(points) < 3:
+        return list(points)
+    kept = [points[0]]
+    for point in points[1:-1]:
+        if haversine_km(kept[-1][0], kept[-1][1], point[0], point[1]) >= min_step_km:
+            kept.append(point)
+    kept.append(points[-1])
+    return kept
+
+
+def _project_on_segment(
+    lat: float, lon: float, a: tuple[float, float], b: tuple[float, float]
+) -> tuple[float, float]:
+    """(distance km from point to segment a-b, fraction 0..1 along the segment).
+
+    Local flat projection around the point: accurate to well under 1 % over a few km.
+    """
+    kx = KM_PER_DEG_LON_EQUATOR * math.cos(math.radians(lat))
+    ax, ay = (a[1] - lon) * kx, (a[0] - lat) * KM_PER_DEG_LAT
+    bx, by = (b[1] - lon) * kx, (b[0] - lat) * KM_PER_DEG_LAT
+    dx, dy = bx - ax, by - ay
+    seg2 = dx * dx + dy * dy
+    t = 0.0 if seg2 == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / seg2))
+    px, py = ax + t * dx, ay + t * dy
+    return math.hypot(px, py), t
+
+
+def stations_along_route(
+    stations: list[dict[str, Any]],
+    route: list[tuple[float, float]],
+    max_offset_km: float,
+    fuel_id: str,
+    fill_liters: float = 40.0,
+    consumption_l_100km: float = 9.0,
+) -> list[dict[str, Any]]:
+    """Stations within max_offset_km of a route given as [(lat, lon), ...].
+
+    Each result gets:
+      route_km        how far along the route the closest point is
+      offset_km       straight-line distance from the route
+      detour_km       rough extra driving (there and back: 2 x offset)
+      effective_price price per litre once the detour's fuel is counted
+    """
+    route = simplify_route(route)
+    if len(route) < 2:
+        return []
+
+    # Cumulative distance at each route point.
+    cumulative = [0.0]
+    for a, b in zip(route, route[1:]):
+        cumulative.append(cumulative[-1] + haversine_km(a[0], a[1], b[0], b[1]))
+
+    # Grid index of segments so each station only checks nearby ones.
+    cell_deg = max(max_offset_km, 1.0) / KM_PER_DEG_LAT
+    grid: dict[tuple[int, int], list[int]] = {}
+    for i, (a, b) in enumerate(zip(route, route[1:])):
+        lat_lo, lat_hi = sorted((a[0], b[0]))
+        lon_lo, lon_hi = sorted((a[1], b[1]))
+        for gy in range(math.floor(lat_lo / cell_deg), math.floor(lat_hi / cell_deg) + 1):
+            for gx in range(math.floor(lon_lo / cell_deg), math.floor(lon_hi / cell_deg) + 1):
+                grid.setdefault((gy, gx), []).append(i)
+
+    # Longitude cells are narrower in km than latitude cells, so look further sideways.
+    lat_mid = route[len(route) // 2][0]
+    lon_reach = math.ceil(1 / max(math.cos(math.radians(lat_mid)), 0.1))
+
+    lats = [p[0] for p in route]
+    lons = [p[1] for p in route]
+    margin = 2 * cell_deg * lon_reach
+    min_lat, max_lat = min(lats) - margin, max(lats) + margin
+    min_lon, max_lon = min(lons) - margin, max(lons) + margin
+
+    results: list[dict[str, Any]] = []
+    for station in stations:
+        s_lat, s_lon = station.get("latitude"), station.get("longitude")
+        if not s_lat or not s_lon:
+            continue
+        if not (min_lat <= s_lat <= max_lat and min_lon <= s_lon <= max_lon):
+            continue
+
+        gy, gx = math.floor(s_lat / cell_deg), math.floor(s_lon / cell_deg)
+        segments: set[int] = set()
+        for dy in (-1, 0, 1):
+            for dx in range(-lon_reach - 1, lon_reach + 2):
+                segments.update(grid.get((gy + dy, gx + dx), ()))
+        if not segments:
+            continue
+
+        best: tuple[float, float] | None = None  # (offset, route_km)
+        for i in segments:
+            dist, t = _project_on_segment(s_lat, s_lon, route[i], route[i + 1])
+            if best is None or dist < best[0]:
+                best = (dist, cumulative[i] + t * (cumulative[i + 1] - cumulative[i]))
+        if best is None or best[0] > max_offset_km:
+            continue
+
+        item = find_price_item(station, fuel_id)
+        if item is None or item.get("IsAvailable") is False:
+            continue
+        price = parse_price(item.get("Price"))
+        if price is None:
+            continue
+
+        offset, route_km = best
+        detour = 2 * offset
+        extra_litres = detour * consumption_l_100km / 100
+        effective = price * (1 + extra_litres / fill_liters) if fill_liters > 0 else price
+
+        result = dict(station)
+        result["target_price"] = price
+        result["route_km"] = round(route_km, 1)
+        result["offset_km"] = round(offset, 2)
+        result["detour_km"] = round(detour, 1)
+        result["effective_price"] = round(effective, 1)
+        results.append(result)
+    return results
